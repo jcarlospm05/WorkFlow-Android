@@ -1,0 +1,86 @@
+package com.workflow.operaciones
+
+import android.content.Intent
+import android.os.Bundle
+import android.os.Build
+import android.app.KeyguardManager
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import android.provider.Settings
+import android.view.WindowManager
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import com.workflow.operaciones.ui.*
+
+class MainActivity : FragmentActivity() {
+    private var unlocked by mutableStateOf(false)
+    private var inbound by mutableStateOf<Uri?>(null)
+    private lateinit var model: WorkflowViewModel
+    private val credentialLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) unlocked = true
+    }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        model = ViewModelProvider(this, object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = WorkflowViewModel((application as WorkflowApp).repository) as T
+        })[WorkflowViewModel::class.java]
+        capture(intent)
+        setContent {
+            WorkflowTheme {
+                if (unlocked) {
+                    LaunchedEffect(inbound) { inbound?.let { model.preview(it); inbound = null } }
+                    WorkflowScreen(model)
+                } else Surface(color = Brand.Background, modifier = Modifier.fillMaxSize()) {
+                    Column(Modifier.safeDrawingPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        BrandHeader()
+                        Spacer(Modifier.height(24.dp))
+                        Text("Tu información está protegida", style = MaterialTheme.typography.titleLarge)
+                        Text("Desbloquea con la seguridad de Android. El teléfono debe tener PIN, patrón, contraseña o biometría.")
+                        Button(onClick = ::unlock) { Text("Desbloquear WorkFlow") }
+                        TextButton(onClick = { startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }) { Text("Configurar bloqueo del teléfono") }
+                    }
+                }
+            }
+        }
+    }
+    @Suppress("DEPRECATION")
+    private fun unlock() {
+        if (Build.VERSION.SDK_INT < 30) {
+            val keyguard = getSystemService(KeyguardManager::class.java)
+            if (keyguard.isDeviceSecure) {
+                keyguard.createConfirmDeviceCredentialIntent("WorkFlow", "Desbloquear datos del supervisor")?.let(credentialLauncher::launch)
+            } else startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
+            return
+        }
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        if (BiometricManager.from(this).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
+            model.message = "Configura un bloqueo seguro del teléfono"; return
+        }
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { unlocked = true }
+        })
+        prompt.authenticate(BiometricPrompt.PromptInfo.Builder().setTitle("Desbloquear WorkFlow").setAllowedAuthenticators(authenticators).build())
+    }
+    override fun onStop() { super.onStop(); if (!isChangingConfigurations) unlocked = false }
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); capture(intent) }
+    @Suppress("DEPRECATION")
+    private fun capture(intent: Intent?) {
+        val uri = when (intent?.action) { Intent.ACTION_VIEW -> intent.data; Intent.ACTION_SEND -> intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM); else -> null }
+        if (uri?.scheme == "content") inbound = uri
+    }
+}
