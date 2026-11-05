@@ -18,7 +18,8 @@ object Reports {
     fun pdf(context: Context, doc: DailyDocument): File {
         val file = target(context, doc, "pdf")
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 10f; color = Color.rgb(22, 59, 67); typeface = Typeface.create("sans-serif", Typeface.NORMAL) }
-        PdfDocument().use { pdf ->
+        val pdf = PdfDocument()
+        try {
             var page: PdfDocument.Page? = null
             var y = 0f
             var pageNumber = 0
@@ -54,6 +55,8 @@ object Reports {
             }
             page?.let(pdf::finishPage)
             file.outputStream().use(pdf::writeTo)
+        } finally {
+            pdf.close()
         }
         return file
     }
