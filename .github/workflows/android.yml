@@ -1,0 +1,41 @@
+name: Validar y compilar WorkFlow
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Compilar, comprobar y ejecutar pruebas
+        run: gradle :core:test :app:lintDebug :app:assembleDebug --stacktrace
+      - name: Conservar diagnósticos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorkFlow-build-reports
+          path: |
+            core/build/reports/
+            app/build/reports/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WorkFlow-development-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
