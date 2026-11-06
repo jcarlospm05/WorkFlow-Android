@@ -49,7 +49,14 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
             busy = true
             actionError = null
             try { block() } catch (e: Exception) {
-                val detail = if (e is android.database.sqlite.SQLiteConstraintException) "Ese nombre o código ya está en uso. Revisa el registro." else e.message ?: "No se completó la operación"
+                val detail = when (e) {
+                    is android.database.sqlite.SQLiteConstraintException -> "Ese nombre o código ya está en uso. Revisa el registro."
+                    is android.database.sqlite.SQLiteException -> "No se pudo guardar el cambio. Revisa el espacio disponible en el teléfono e inténtalo de nuevo."
+                    is java.time.DateTimeException -> "Revisa la fecha y vuelve a intentarlo."
+                    is SecurityException -> "No se pudo abrir el archivo. Selecciónalo de nuevo desde tus documentos."
+                    is java.io.IOException -> "No se pudo acceder al archivo. Revisa que esté disponible y que haya espacio en el teléfono."
+                    else -> e.message ?: "No se completó la operación"
+                }
                 message = detail; actionError = detail
             }
             finally { busy = false }

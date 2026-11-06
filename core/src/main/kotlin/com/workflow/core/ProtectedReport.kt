@@ -66,6 +66,8 @@ object ProtectedReport {
         } catch (_: java.security.GeneralSecurityException) {
             throw IllegalArgumentException("No se pudo abrir el informe. Revisa la clave o pide que te lo compartan de nuevo.")
         }
-        return try { DailyCodec.decode(clear) } finally { clear.fill(0) }
+        return try { DailyCodec.decode(clear) }
+        catch (_: Exception) { throw IllegalArgumentException("No se pudo leer el informe. Pide que te lo compartan de nuevo.") }
+        finally { clear.fill(0) }
     }
 }
