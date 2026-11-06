@@ -29,11 +29,11 @@ object DailyCodec {
                 if (escaped) escaped = false else if (ch == '\\') escaped = true else if (ch == '"') quoted = false
             } else when (ch) {
                 '"' -> quoted = true
-                '{', '[' -> { depth++; require(depth <= 32) { "JSON demasiado profundo" } }
-                '}', ']' -> { depth--; require(depth >= 0) { "JSON inválido" } }
+                '{', '[' -> { depth++; require(depth <= 32) { "El informe es demasiado complejo" } }
+                '}', ']' -> { depth--; require(depth >= 0) { "Informe inválido" } }
             }
         }
-        require(depth == 0 && !quoted) { "JSON incompleto" }
+        require(depth == 0 && !quoted) { "Informe incompleto" }
         val text = Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString()
         val document = json.decodeFromString<DailyDocument>(text)
         validate(document)
@@ -46,7 +46,9 @@ object DailyCodec {
         require(d.revision > 0 && d.revision < Long.MAX_VALUE)
         require(d.operators.size <= 2000 && d.assets.size <= 2000 && d.items.size <= 2000 && d.operations.size <= 3000) { "Demasiados registros" }
         d.operators.forEach(Rules::operator); d.assets.forEach(Rules::asset); d.items.forEach(Rules::item)
-        require(d.operators.distinctBy { it.id }.size == d.operators.size && d.operators.distinctBy { it.code.lowercase() }.size == d.operators.size)
+        require(d.operators.distinctBy { it.id }.size == d.operators.size)
+        val assignedCodes = d.operators.filter { it.code.isNotBlank() }.map { it.code.lowercase(java.util.Locale.ROOT) }
+        require(assignedCodes.distinct().size == assignedCodes.size) { "Hay códigos de empleado repetidos" }
         require(d.assets.distinctBy { it.id }.size == d.assets.size && d.assets.distinctBy { it.code.lowercase() }.size == d.assets.size)
         require(d.items.distinctBy { it.id }.size == d.items.size)
         require(d.operations.distinctBy { it.id }.size == d.operations.size) { "Operaciones duplicadas" }
@@ -78,7 +80,7 @@ object DailySummary {
     fun pending(d: DailyDocument): List<Operation> = d.operations.filter { it.status in listOf("Pendiente", "Abierta", "En proceso", "Borrador") }
     fun lines(d: DailyDocument): List<String> = buildList {
         add("Supervisor: ${d.supervisor} · Fecha: ${d.day}")
-        add("Revisión ${d.revision} · Actualizado ${d.generatedAt}")
+        add("Actualización ${d.revision} · Actualizado ${d.generatedAt}")
         add("Presentes únicos: ${present(d)} · Pendientes: ${pending(d).size}")
         Module.entries.forEach { module ->
             val rows = d.operations.filter { it.module == module }

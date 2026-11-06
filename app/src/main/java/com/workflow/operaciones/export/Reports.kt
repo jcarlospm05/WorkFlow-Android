@@ -7,14 +7,23 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.util.AtomicFile
 import androidx.core.content.FileProvider
-import com.workflow.core.DailyCodec
 import com.workflow.core.DailyDocument
 import com.workflow.core.DailySummary
+import com.workflow.core.ProtectedReport
 import java.io.File
 
 object Reports {
-    fun json(context: Context, doc: DailyDocument): File = target(context, doc, "json").apply { writeBytes(DailyCodec.encode(doc)) }
+    fun protectedReport(context: Context, doc: DailyDocument, password: CharArray): File {
+        val bytes = ProtectedReport.encode(doc, password)
+        val file = target(context, doc, ProtectedReport.EXTENSION)
+        val atomic = AtomicFile(file)
+        val output = atomic.startWrite()
+        try { output.write(bytes); atomic.finishWrite(output) }
+        catch (e: Exception) { atomic.failWrite(output); throw e }
+        return file
+    }
     fun pdf(context: Context, doc: DailyDocument): File {
         val file = target(context, doc, "pdf")
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 10f; color = Color.rgb(22, 59, 67); typeface = Typeface.create("sans-serif", Typeface.NORMAL) }
@@ -30,7 +39,7 @@ object Reports {
                 paint.textSize = 22f; paint.isFakeBoldText = true
                 canvas.drawText("WorkFlow", 36f, 42f, paint)
                 paint.textSize = 10f; paint.isFakeBoldText = false
-                canvas.drawText("Informe diario · ${doc.day} · Revisión ${doc.revision}", 36f, 62f, paint)
+                canvas.drawText("Informe diario · ${doc.day} · Actualización ${doc.revision}", 36f, 62f, paint)
                 canvas.drawText("Página $pageNumber · Datos personales: comparte con destinatarios autorizados", 36f, 816f, paint)
                 y = 88f
             }
@@ -63,13 +72,13 @@ object Reports {
     private fun target(context: Context, doc: DailyDocument, extension: String): File {
         val dir = File(context.cacheDir, "shared").apply { mkdirs() }
         val cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
-        dir.listFiles()?.filter { it.lastModified() < cutoff }?.forEach { it.delete() }
+        dir.listFiles()?.filter { it.extension == "json" || it.lastModified() < cutoff }?.forEach { it.delete() }
         return File(dir, "WorkFlow_${doc.day}_${doc.originId.take(8)}_r${doc.revision}.$extension")
     }
     fun share(context: Context, file: File, whatsapp: Boolean) {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
         val send = Intent(Intent.ACTION_SEND).apply {
-            type = if (file.extension == "json") "application/json" else "application/pdf"
+            type = if (file.extension == ProtectedReport.EXTENSION) ProtectedReport.MIME_TYPE else "application/pdf"
             putExtra(Intent.EXTRA_STREAM, uri)
             clipData = ClipData.newRawUri("Informe WorkFlow", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

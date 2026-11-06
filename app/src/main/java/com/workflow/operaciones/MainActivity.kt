@@ -15,6 +15,7 @@ import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -42,9 +43,10 @@ class MainActivity : FragmentActivity() {
         capture(intent)
         setContent {
             WorkflowTheme {
+                val screenState = rememberSaveableStateHolder()
                 if (unlocked) {
-                    LaunchedEffect(inbound) { inbound?.let { model.preview(it); inbound = null } }
-                    WorkflowScreen(model)
+                    LaunchedEffect(inbound, model.busy) { if (!model.busy) inbound?.let { model.preview(it); inbound = null } }
+                    screenState.SaveableStateProvider("workflow") { WorkflowScreen(model) }
                 } else Surface(color = Brand.Background, modifier = Modifier.fillMaxSize()) {
                     Column(Modifier.safeDrawingPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         BrandHeader()

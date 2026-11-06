@@ -20,6 +20,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.workflow.core.DailyDocument
@@ -41,7 +43,7 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
 }
 @Composable internal fun WFHeading(title: String, day: String, chooseDate: () -> Unit) {
     Column(Modifier.clickable(onClick = chooseDate).heightIn(min = 56.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineMedium)
+        Text(title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.testTag("screen-title"))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(friendlyDay(day), style = MaterialTheme.typography.bodyLarge, color = Brand.SecondaryText, modifier = Modifier.weight(1f, fill = false))
             Icon(Icons.Outlined.ExpandMore, "Cambiar fecha", Modifier.size(18.dp), tint = Brand.SecondaryText)
@@ -53,14 +55,15 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
         Icon(icon, null, Modifier.size((size * .55f).dp), tint = Brand.Petroleum)
     }
 }
-@Composable internal fun MetricTile(value: String, label: String, icon: ImageVector, color: Color, modifier: Modifier = Modifier) {
-    Surface(modifier = modifier.heightIn(min = 84.dp), shape = RoundedCornerShape(20.dp), color = color, border = BorderStroke(.5.dp, Brand.Border.copy(alpha = .65f)), shadowElevation = 2.dp) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            WFIcon(icon, Color.White.copy(alpha = .42f), 32)
-            Column(Modifier.weight(1f)) {
-                Text(value, style = MaterialTheme.typography.headlineMedium)
-                Text(label, style = MaterialTheme.typography.labelMedium)
+@Composable internal fun MetricTile(value: String, label: String, icon: ImageVector, color: Color, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+    Surface(modifier = modifier.heightIn(min = 96.dp).then(if (onClick != null) Modifier.clickable(role = Role.Button, onClickLabel = "Abrir $label", onClick = onClick) else Modifier), shape = RoundedCornerShape(20.dp), color = color, border = BorderStroke(.5.dp, Brand.Border.copy(alpha = .65f)), shadowElevation = 2.dp) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                WFIcon(icon, Color.White.copy(alpha = .42f), 28)
+                Text(value, Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
+                if (onClick != null) Icon(Icons.Outlined.ChevronRight, null, Modifier.size(18.dp))
             }
+            Text(label, style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -80,14 +83,14 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
 }
 @Composable internal fun ProgressPanel(done: Int, total: Int) {
     WFCard(Modifier.fillMaxWidth()) {
-        Text("$done de $total tareas completadas", style = MaterialTheme.typography.titleSmall)
+        Text(if (total == 0) "Añade tus actividades del día" else "$done de $total tareas completadas", style = MaterialTheme.typography.titleSmall)
         LinearProgressIndicator(progress = { if (total == 0) 0f else done.toFloat() / total }, modifier = Modifier.fillMaxWidth().height(7.dp).clip(CircleShape), color = Brand.Teal, trackColor = Brand.Selected)
     }
 }
 @Composable internal fun ProgressRing(done: Int, total: Int) {
     Box(Modifier.size(78.dp), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(progress = { if (total == 0) 0f else done.toFloat() / total }, modifier = Modifier.fillMaxSize(), color = Brand.Teal, trackColor = Brand.Selected, strokeWidth = 6.dp, strokeCap = StrokeCap.Round)
-        Text("$done/$total", style = MaterialTheme.typography.titleMedium)
+        Text(if (total == 0) "—" else "$done/$total", style = MaterialTheme.typography.titleMedium)
     }
 }
 @Composable internal fun QuickAction(icon: ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
@@ -153,7 +156,7 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
             WFIcon(Icons.Outlined.Person, Brand.Selected, 38)
             Column(Modifier.weight(1f)) {
                 Text(operator.name, style = MaterialTheme.typography.titleMedium)
-                Text("${operator.code} · Habitual: ${operator.shift}", style = MaterialTheme.typography.bodySmall, color = Brand.SecondaryText)
+                Text(listOf(operator.code, "Habitual: ${operator.shift}").filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = Brand.SecondaryText)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Checkbox(checked = operation?.extended == true, enabled = enabled && operation != null, onCheckedChange = { update(operation?.status ?: "Presente", it) })

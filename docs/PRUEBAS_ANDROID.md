@@ -1,16 +1,27 @@
-# Lista de aceptación en dispositivo — pendiente de ejecución
+# Validación Android
 
-1. Android 26/29 con PIN y Android 35 con PIN/biometría. Rechazar/cancelar desbloqueo no muestra datos. Volver desde WhatsApp solicita desbloqueo sin perder el registro guardado.
-2. Teléfono con cámara central/lateral, gestos y tres botones. Controles fuera del recorte y barras del sistema. Fuente a 200%, teclado abierto y pantalla pequeña: formularios desplazables, Guardar accesible.
-3. Añadir personal, equipos y artículo. Reiniciar y verificar persistencia. Desactivar personal conserva el historial.
-4. Registrar presente, corregir a tardanza, añadir turno noche/EXT: no duplica la fila del mismo turno y presentes únicos no se duplica por turno.
-5. Cena de un operador sin asistencia: válida. Editar cena cambia la misma solicitud. Almuerzos de sábado/domingo en sus fechas de trabajo correspondientes.
-6. Entrada 10 unidades, salida 3, día siguiente saldo 7. Rechazar salida 8. Corregir entrada anterior a 2: rechazar y conservar todos los documentos previos por rollback.
-7. Cada guardado incrementa revisión y reabrir conserva cambios tras matar el proceso. PDF largo de más de 100 registros conserva todas las páginas y caracteres españoles.
-8. Recibir JSON en otro teléfono: vista previa, mismo contenido por módulo, nombres y listas de comida. Reimportar no duplica. Nueva revisión actualiza; antigua se rechaza. Misma revisión con otro contenido se rechaza.
-9. JSON corrupto, versión desconocida, UTF-8 malformado, referencia inexistente, fecha imposible, más de 4 MB y anidamiento excesivo: rechazar antes de tocar datos recibidos/propios.
-10. Cerrar con pendientes requiere explicación. Corregir exige reapertura. Auditoría conserva antes/después de correcciones.
-11. Compartir JSON/PDF desde botón y oferta tras guardar: abrir WhatsApp instalado o selector si falta; envío requiere confirmación. Abrir PDF externo y JSON en WorkFlow receptor. Probar WhatsApp Business y MIME genérico (usar selector si no aparece Abrir con).
-12. Release usa certificado propio; manifiesto fusionado sin INTERNET ni permisos de almacenamiento amplios. FileProvider no expone SQLite, preferencias, auditoría ni JSON privados originales.
+La compilación de la aplicación no incluye bases de datos ni registros sintéticos. Las pruebas de instrumentación crean sus datos dentro del emulador, mediante `androidTest`, y no se distribuyen en la APK para la persona usuaria.
 
-El informe recibido representa la última revisión importada, no el estado en tiempo real del teléfono remitente.
+## Pruebas automatizadas
+
+- `core:test`: reglas, documentos internos, importación y envoltura protegida. Comprobar clave incorrecta, cambios de contenido/etiqueta/sal, parámetros maliciosos, límites y ausencia de alternativa sin cifrado.
+- `RepositoryTest`: instalación sin datos de negocio, códigos opcionales y unicidad de los asignados, correcciones, cierre de jornada, existencias e importación separada.
+- `TransferProtectionTest`: guardar y recuperar la frase con Android Keystore y comprobar que su representación almacenada cambia en cada escritura.
+- `UserExperienceTest`: altas consecutivas de personal/equipos/artículos, edición sin duplicados, registros consecutivos sin interrupción para compartir, dashboard, conservación de borradores y recepción protegida sin sustituir datos propios.
+- `DialogInsetsTest`: gestos y tres botones de Android con teclado real. Pulsar los controles y comprobar sus límites físicos, incluidos «Guardar y añadir otro».
+- `RealScreenshotsTest`: capturas de la interfaz real y logo en un emulador. Sus datos visuales de ejemplo son exclusivos de la prueba.
+
+## Pruebas manuales en dos teléfonos
+
+1. Instalar la APK normal y confirmar que no existen operadores, equipos, artículos, actividades ni informes recibidos precargados.
+2. Añadir varios operadores sin código; conservar turno entre altas. Cerrar y regresar a Personal, sin volver al inicio. Editar uno y comprobar que no se duplica.
+3. Repetir altas consecutivas de equipos, artículos y operaciones. Un error mantiene los campos y el formulario abierto. La oferta de compartir se presenta al terminar, sin interrumpir una secuencia.
+4. Pulsar los cuatro indicadores del dashboard y comprobar su destino; bajo mínimo abre el filtro correspondiente.
+5. Abrir un formulario, pasar por el bloqueo de Android y volver. Conservar módulo, desplazamiento y borrador. No guardar frases del equipo en el estado de navegación.
+6. Compartir un informe por WhatsApp y WhatsApp Business. Si no están instalados, usar el selector Android. Confirmar destinatario y envío en la aplicación elegida.
+7. Configurar la frase en el emisor y abrir el informe en el segundo teléfono con la misma frase. Revisar supervisor/fecha y guardar en Informes recibidos.
+8. Recordar la frase y abrir el siguiente informe sin volver a pedirla. Introducir una frase equivocada o modificar un archivo: no mostrar contenido ni alterar datos recibidos o propios.
+9. Reabrir la misma actualización sin duplicar; recibir una posterior y rechazar una anterior o un conflicto de igual actualización.
+10. Generar y abrir el documento PDF en un lector externo y revisar nombres, listas de comida, cantidades, paginación y textos largos.
+11. Comprobar en teléfonos físicos pequeños, escala de fuente grande, gestos, tres botones, teclado y recorte de cámara. Los resultados en emulador no sustituyen esta comprobación.
+12. Antes de distribución de producción, revisar firma persistente, actualización desde instalaciones previas y recuperación de archivos antiguos.

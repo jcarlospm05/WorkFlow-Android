@@ -143,14 +143,14 @@ class DialogInsetsTest {
                 compose.waitUntil(30_000) { !model.busy && model.document != null }
                 show { if (open.value) OperationEditor(original, model) { open.value = false } else Text("Formulario cerrado") }
                 if (keyboard) openKeyboard("operation-notes")
-                assertSafeActions("dialog-cancel", "dialog-confirm")
+                assertSafeActions("dialog-cancel", "dialog-confirm", "dialog-save-another")
                 capture("editor-$mode-${if (keyboard) "keyboard" else "closed"}")
                 compose.onNodeWithTag("dialog-cancel").performClick()
                 compose.waitUntil(10_000) { !open.value }
                 assertFalse(model.document!!.operations.any { it.id == original.id })
                 compose.runOnIdle { open.value = true }
                 if (keyboard) openKeyboard("operation-notes")
-                assertSafeActions("dialog-cancel", "dialog-confirm")
+                assertSafeActions("dialog-cancel", "dialog-confirm", "dialog-save-another")
                 compose.onNodeWithTag("dialog-confirm").performClick()
                 compose.waitUntil(20_000) { !open.value && !model.busy }
                 assertTrue(model.document!!.operations.any { it.id == original.id })

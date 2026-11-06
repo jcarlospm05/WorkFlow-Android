@@ -9,7 +9,8 @@ import java.util.UUID
     ATTENDANCE("Asistencia"), MEAL("Comidas"), FUEL("Combustible"), FAULT("Averías"),
     TICKET("Infracciones"), PLAN("Planificación"), TASK("Agenda"), STOCK("Existencias"), POSITION("Posiciones"), CLOSE("Cierre")
 }
-@Serializable data class Operator(val id: String, val code: String, val name: String, val shift: String = "Mañana", val active: Boolean = true)
+@Serializable data class Operator(val id: String, val code: String = "", val name: String, val shift: String = "Mañana", val active: Boolean = true)
+val Operator.displayLabel: String get() = listOf(name, code).filter { it.isNotBlank() }.joinToString(" · ")
 @Serializable data class Asset(val id: String, val code: String, val type: String, val state: String = "Activo")
 @Serializable data class StockItem(val id: String, val name: String, val unit: String, val minimum: Double = 0.0)
 /** One operation is editable and traceable; corrections retain the same id. No physical deletion. */
@@ -58,9 +59,9 @@ object Rules {
         require((!required || value.isNotBlank()) && value.length <= max && value.none { it.code < 32 && it != '\n' && it != '\t' }) { "Texto vacío, demasiado largo o inválido" }
     }
     fun day(value: String) { require(LocalDate.parse(value).toString() == value) { "Fecha inválida" } }
-    fun operator(value: Operator) { id(value.id); text(value.name); text(value.code, 40); require(value.shift in shifts) }
-    fun asset(value: Asset) { id(value.id); text(value.code, 40); text(value.type, 60); require(value.state in listOf("Activo", "En taller", "Inactivo")) }
-    fun item(value: StockItem) { id(value.id); text(value.name); text(value.unit, 30); require(value.minimum.isFinite() && value.minimum >= 0) }
+    fun operator(value: Operator) { id(value.id); text(value.name); text(value.code, 40, required = false); require(value.shift in shifts) { "Selecciona un turno" } }
+    fun asset(value: Asset) { id(value.id); text(value.code, 40); text(value.type, 60); require(value.state in listOf("Activo", "En taller", "Inactivo")) { "Selecciona un estado para el equipo" } }
+    fun item(value: StockItem) { id(value.id); text(value.name); text(value.unit, 30); require(value.minimum.isFinite() && value.minimum >= 0) { "El stock mínimo debe ser igual o mayor que cero" } }
     fun operation(value: Operation, operators: List<Operator>, assets: List<Asset>, items: List<StockItem>) {
         id(value.id); day(value.day); text(value.title); text(value.notes, 3000, false)
         require(value.status in statuses.getValue(value.module)) { "Estado inválido" }

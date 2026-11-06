@@ -13,10 +13,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import java.io.File
 import java.time.Instant
-import java.time.LocalDate
 import java.util.UUID
 
 class WorkflowRepository(private val context: Context, private val db: WorkflowDatabase) {
+    val transferKeys = TransferKeyStore(context)
     private val dao = db.dao()
     private val mutex = Mutex()
     @Volatile var fileWarning: String? = null
@@ -38,7 +38,6 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
         mutex.withLock {
             Rules.day(day)
             val doc = dao.document(day)?.let(::decodeDocument) ?: db.withTransaction {
-                seedTasks(day)
                 regenerate(day)
             }
             materialize(doc)
@@ -52,7 +51,13 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
             rows.filter { it.kind == "asset" }.map { json.decodeFromString<Asset>(it.payload) },
             rows.filter { it.kind == "item" }.map { json.decodeFromString<StockItem>(it.payload) })
     }
-    suspend fun addOperator(value: Operator, day: String) { Rules.operator(value); addMaster(MasterRow(value.id, "operator", value.code.lowercase(), json.encodeToString(value)), day) }
+    suspend fun addOperator(value: Operator, day: String) {
+        Rules.operator(value)
+        // Keep the existing unique index and installed databases. An absent employee code uses
+        // an internal key longer than any accepted employee code; it is never shown to people.
+        val uniqueKey = value.code.lowercase(java.util.Locale.ROOT).ifBlank { "workflow:auto:${value.id}" }
+        addMaster(MasterRow(value.id, "operator", uniqueKey, json.encodeToString(value)), day)
+    }
     suspend fun addAsset(value: Asset, day: String) { Rules.asset(value); addMaster(MasterRow(value.id, "asset", value.code.lowercase(), json.encodeToString(value)), day) }
     suspend fun addItem(value: StockItem, day: String) { Rules.item(value); addMaster(MasterRow(value.id, "item", value.name.lowercase(), json.encodeToString(value)), day) }
     private suspend fun addMaster(row: MasterRow, day: String) = withContext(Dispatchers.IO) {
@@ -96,29 +101,6 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
             docs.forEach(::materialize)
         }
     }
-    private suspend fun seedTasks(day: String) {
-        val tasks = mutableListOf(
-            "07:00" to "Registrar asistencia de mañana",
-            "09:00" to "Revisar existencias y equipos",
-            "10:30" to "Confirmar si corresponde combustible",
-            "11:00" to "Preparar solicitud de cenas",
-            "15:00" to "Registrar asistencia de tarde / noche",
-            "17:00" to "Revisar pendientes y cierre"
-        )
-        if (LocalDate.parse(day).dayOfWeek.value == 5) {
-            tasks += "11:30" to "Solicitar almuerzos del sábado y domingo"
-            tasks += "12:00" to "Programar fin de semana y libres compensatorios"
-        }
-        tasks.forEach { (time, title) ->
-            val id = UUID.nameUUIDFromBytes("$origin|$day|$title".toByteArray()).toString()
-            if (dao.operation(id) == null) {
-                val op = Operation(id = id, day = day, module = Module.TASK, title = title, status = "Pendiente", time = time)
-                val payload = json.encodeToString(op)
-                dao.putOperation(OperationRow(id, day, Module.TASK.name, null, payload))
-                dao.audit(AuditRow(at = op.updatedAt, action = "CREATE_PLANNER_TASK", recordId = id, before = null, after = payload))
-            }
-        }
-    }
     private suspend fun validateStockHistory(items: List<StockItem>) {
         val stock = dao.allOperations().map { json.decodeFromString<Operation>(it.payload) }.filter { it.module == Module.STOCK }
         items.forEach { item ->
@@ -152,22 +134,23 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
             catch (e: Exception) { file.failWrite(output); throw e }
             fileWarning = null
         } catch (_: java.io.IOException) {
-            fileWarning = "Datos guardados en SQLite; falta espacio o acceso para actualizar el archivo JSON privado. Se reintentará al abrir el informe."
+            fileWarning = "El registro está guardado. Libera espacio para actualizar su copia de respaldo; no necesitas registrarlo otra vez."
         }
     }
-    suspend fun preview(uri: Uri): DailyDocument = withContext(Dispatchers.IO) {
+    suspend fun readSharedReport(uri: Uri): ByteArray = withContext(Dispatchers.IO) {
         require(uri.scheme == "content") { "Selecciona un archivo mediante Android" }
         val bytes = context.contentResolver.openInputStream(uri)?.use { stream ->
             val buffer = java.io.ByteArrayOutputStream()
             val chunk = ByteArray(8192)
             var count = stream.read(chunk)
             while (count != -1) {
-                require(buffer.size() + count <= DailyCodec.MAX_BYTES) { "Informe mayor de 4 MB" }
+                require(buffer.size() + count <= ProtectedReport.MAX_BYTES) { "El informe es demasiado grande" }
                 buffer.write(chunk, 0, count); count = stream.read(chunk)
             }
             buffer.toByteArray()
         } ?: error("No se pudo leer el archivo")
-        DailyCodec.decode(bytes)
+        ProtectedReport.validateEnvelope(bytes)
+        bytes
     }
     suspend fun receive(doc: DailyDocument): ImportDecision = withContext(Dispatchers.IO) {
         mutex.withLock {

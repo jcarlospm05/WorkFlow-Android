@@ -1,6 +1,6 @@
 # Firma de la revisión de controles
 
-La APK 1.0.2 usa el paquete com.workflow.operaciones.review y se instala aparte de com.workflow.operaciones.visual. Las APK anteriores de CI tenían certificados de depuración distintos entre ejecuciones: no permiten actualizarse unas sobre otras. No se requiere desinstalar la app anterior para probar esta corrección.
+La APK 1.0.2 usa el paquete com.workflow.operaciones.ux y se instala aparte de com.workflow.operaciones.visual. Las APK anteriores de CI tenían certificados de depuración distintos entre ejecuciones: no permiten actualizarse unas sobre otras. No se requiere desinstalar la app anterior para probar esta corrección.
 
 Se ha creado una clave privada de revisión persistente fuera del repositorio, en /workspace/.workflow-signing. La contraseña tampoco forma parte del código, de los artefactos de GitHub ni de los archivos de distribución. La APK se firma localmente con esa clave tras descargar el resultado de CI; las siguientes revisiones deben usar la misma clave e identificador para permitir actualizaciones.
 

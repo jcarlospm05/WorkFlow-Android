@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -36,9 +37,6 @@ import androidx.compose.ui.unit.sp
 import com.workflow.core.*
 import com.workflow.core.Module
 import com.workflow.operaciones.R
-import com.workflow.operaciones.export.Reports
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -96,28 +94,42 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun WorkflowScreen(vm: WorkflowViewModel) {
-    var tab by remember { mutableIntStateOf(0) }
-    var module by remember { mutableStateOf<Module?>(null) }
-    var editor by remember { mutableStateOf<Operation?>(null) }
-    var master by remember { mutableStateOf<String?>(null) }
-    var editOperator by remember { mutableStateOf<Operator?>(null) }
-    var editAsset by remember { mutableStateOf<Asset?>(null) }
-    var editItem by remember { mutableStateOf<StockItem?>(null) }
-    var viewing by remember { mutableStateOf<DailyDocument?>(null) }
-    var dateDialog by remember { mutableStateOf(false) }
-    var plannerFilter by remember { mutableStateOf("Pendientes") }
-    var attendanceShift by remember { mutableStateOf("Mañana") }
-    var operatorSearch by remember { mutableStateOf("") }
-    var mealType by remember { mutableStateOf("Cena") }
-    var mealPreview by remember { mutableStateOf(false) }
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var module by rememberSaveable { mutableStateOf<Module?>(null) }
+    var editor by rememberSaveable(stateSaver = formSaver<Operation>()) { mutableStateOf<Operation?>(null) }
+    var master by rememberSaveable { mutableStateOf<String?>(null) }
+    var editOperator by rememberSaveable(stateSaver = formSaver<Operator>()) { mutableStateOf<Operator?>(null) }
+    var editAsset by rememberSaveable(stateSaver = formSaver<Asset>()) { mutableStateOf<Asset?>(null) }
+    var editItem by rememberSaveable(stateSaver = formSaver<StockItem>()) { mutableStateOf<StockItem?>(null) }
+    var viewingRef by rememberSaveable { mutableStateOf<String?>(null) }
+    val viewing = (listOfNotNull(vm.document) + vm.received + vm.history).firstOrNull { "${it.originId}|${it.day}" == viewingRef }
+    var catalog by rememberSaveable { mutableStateOf<String?>(null) }
+    var catalogSearch by rememberSaveable { mutableStateOf("") }
+    var pendingOverview by rememberSaveable { mutableStateOf(false) }
+    var onlyLowStock by rememberSaveable { mutableStateOf(false) }
+    var dateDialog by rememberSaveable { mutableStateOf(false) }
+    var plannerFilter by rememberSaveable { mutableStateOf("Pendientes") }
+    var attendanceShift by rememberSaveable { mutableStateOf("Mañana") }
+    var operatorSearch by rememberSaveable { mutableStateOf("") }
+    var mealType by rememberSaveable { mutableStateOf("Cena") }
+    var mealPreview by rememberSaveable { mutableStateOf(false) }
     val savedMeal = vm.document?.operations?.firstOrNull { it.module == Module.MEAL && it.mealType == mealType }
     var mealSelected by remember(vm.day, mealType, savedMeal?.updatedAt) { mutableStateOf(savedMeal?.operatorIds?.toSet() ?: emptySet<String>()) }
     val context = LocalContext.current
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::preview) }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(vm.message) { vm.message?.let { snackbar.showSnackbar(it); vm.message = null } }
-    val screenScroll = remember(tab, module, vm.day) { LazyListState() }
-    BackHandler(enabled = tab != 0 || module != null) { if (module != null) module = null else tab = 0 }
+    val screenScroll = rememberSaveable(tab, module, catalog, pendingOverview, vm.day, saver = LazyListState.Saver) { LazyListState() }
+    BackHandler(enabled = tab != 0 || module != null || catalog != null || pendingOverview) {
+        when { catalog != null -> catalog = null; module != null -> module = null; pendingOverview -> pendingOverview = false; else -> tab = 0 }
+    }
+    fun openCatalog(kind: String) { tab = 4; module = null; catalog = kind; catalogSearch = ""; pendingOverview = false }
+    fun openModule(which: Module) {
+        catalog = null; pendingOverview = false
+        if (which == Module.TASK) { tab = 1; module = null; plannerFilter = "Pendientes" }
+        else { tab = 2; module = which }
+    }
+    fun newMaster(kind: String) { editOperator = null; editAsset = null; editItem = null; master = kind }
     fun newOperation(which: Module) {
         editor = Operation(day = vm.day, module = which, title = which.label, status = Rules.statuses.getValue(which).first())
     }
@@ -128,7 +140,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
         topBar = {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { BrandHeader() }
-                Surface(Modifier.size(46.dp).clickable { tab = 4; module = null }, shape = CircleShape, color = Brand.Selected) {
+                Surface(Modifier.size(46.dp).clickable { tab = 4; module = null; catalog = null; pendingOverview = false }, shape = CircleShape, color = Brand.Selected) {
                     Box(contentAlignment = Alignment.Center) { Text(vm.document?.supervisor?.split(" ")?.filter { it.isNotBlank() }?.take(2)?.map { it.first().uppercaseChar() }?.joinToString("") ?: "WF", style = MaterialTheme.typography.titleSmall) }
                 }
             }
@@ -139,7 +151,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                     val labels = listOf("Hoy", "Agenda", "Operación", "Reportes", "Más")
                     val icons = listOf(Icons.Outlined.Home, Icons.Outlined.CalendarMonth, Icons.Outlined.Engineering, Icons.Outlined.Assessment, Icons.Outlined.MoreHoriz)
                     labels.forEachIndexed { index, label ->
-                        Surface(modifier = Modifier.weight(1f).testTag("nav-$index").selectable(selected = tab == index, role = Role.Tab, onClick = { tab = index; module = null }), shape = RoundedCornerShape(18.dp), color = if (tab == index) Brand.Selected else Color.White) {
+                        Surface(modifier = Modifier.weight(1f).testTag("nav-$index").selectable(selected = tab == index, role = Role.Tab, onClick = { if (tab != index) { tab = index; module = null; catalog = null; pendingOverview = false } }), shape = RoundedCornerShape(18.dp), color = if (tab == index) Brand.Selected else Color.White) {
                             Column(Modifier.heightIn(min = 64.dp).padding(horizontal = 2.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Icon(icons[index], null, Modifier.size(24.dp), tint = if (tab == index) Brand.Petroleum else Brand.SecondaryText)
                                 Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, color = if (tab == index) Brand.Petroleum else Brand.SecondaryText)
@@ -155,11 +167,10 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
         if (doc == null) {
             Column(Modifier.padding(insets).padding(20.dp)) { if (vm.busy) CircularProgressIndicator() else Button(onClick = vm::refresh) { Text("Volver a cargar") } }
         } else LazyColumn(
-            Modifier.padding(insets).fillMaxSize().clipToBounds(),
+            Modifier.padding(insets).fillMaxSize().clipToBounds().testTag("workflow-list"),
             state = screenScroll,
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (vm.busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             when (tab) {
                 0 -> {
                     val tasks = doc.operations.filter { it.module == Module.TASK }
@@ -170,30 +181,30 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                                 Text("Tu jornada, bajo control", style = MaterialTheme.typography.titleMedium)
-                                Text("Completa tus actividades y mantén la operación al día.", color = Brand.SecondaryText, style = MaterialTheme.typography.bodyMedium)
+                                Text(if (tasks.isEmpty()) "Añade tus actividades y prepara la jornada." else "Completa tus actividades y mantén la operación al día.", color = Brand.SecondaryText, style = MaterialTheme.typography.bodyMedium)
                             }
                             ProgressRing(done, tasks.size)
                         }
                         Button(onClick = { tab = 1 }, colors = ButtonDefaults.buttonColors(containerColor = Brand.Amber, contentColor = Brand.Petroleum), modifier = Modifier.heightIn(min = 48.dp), shape = RoundedCornerShape(14.dp)) {
-                            Icon(Icons.Outlined.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text("Continuar jornada")
+                            Icon(Icons.Outlined.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text(if (tasks.isEmpty()) "Planificar jornada" else "Continuar jornada")
                         }
                     } }
                     item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        MetricTile(DailySummary.present(doc).toString(), "Presentes", Icons.Outlined.People, Brand.Sage, Modifier.weight(1f))
-                        MetricTile(DailySummary.pending(doc).size.toString(), "Pendientes", Icons.Outlined.Checklist, Brand.Sky, Modifier.weight(1f))
+                        MetricTile(DailySummary.present(doc).toString(), "Presentes", Icons.Outlined.People, Brand.Sage, Modifier.weight(1f).testTag("dashboard-attendance"), onClick = { openModule(Module.ATTENDANCE) })
+                        MetricTile(DailySummary.pending(doc).size.toString(), "Pendientes", Icons.Outlined.Checklist, Brand.Sky, Modifier.weight(1f).testTag("dashboard-pending"), onClick = { tab = 2; module = null; catalog = null; pendingOverview = true })
                     } }
                     item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        MetricTile(doc.assets.count { it.state == "Activo" }.toString(), "Equipos activos", Icons.Outlined.LocalShipping, Brand.Sky, Modifier.weight(1f))
-                        MetricTile(doc.items.count { (doc.stockBalances[it.id] ?: 0.0) < it.minimum }.toString(), "Bajo mínimo", Icons.Outlined.Inventory2, Brand.Sand, Modifier.weight(1f))
+                        MetricTile(doc.assets.count { it.state == "Activo" }.toString(), "Equipos activos", Icons.Outlined.LocalShipping, Brand.Sky, Modifier.weight(1f).testTag("dashboard-assets"), onClick = { openCatalog("asset") })
+                        MetricTile(doc.items.count { (doc.stockBalances[it.id] ?: 0.0) < it.minimum }.toString(), "Bajo mínimo", Icons.Outlined.Inventory2, Brand.Sand, Modifier.weight(1f).testTag("dashboard-stock"), onClick = { onlyLowStock = true; openModule(Module.STOCK) })
                     } }
                     item { Text("Accesos rápidos", style = MaterialTheme.typography.titleMedium) }
                     item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(Module.ATTENDANCE, Module.STOCK, Module.MEAL, Module.FUEL).forEach { entry -> QuickAction(moduleIcon(entry), entry.label, Modifier.weight(1f)) { tab = 2; module = entry } }
+                        listOf(Module.ATTENDANCE, Module.STOCK, Module.MEAL, Module.FUEL).forEach { entry -> QuickAction(moduleIcon(entry), entry.label, Modifier.weight(1f)) { openModule(entry) } }
                     } }
                     item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("Próximas tareas", style = MaterialTheme.typography.titleMedium); TextButton(onClick = { tab = 1 }) { Text("Ver agenda") } } }
                     item { WFCard(Modifier.fillMaxWidth()) {
                         val upcoming = tasks.filter { it.status != "Completada" }.sortedBy { it.time }.take(3)
-                        if (upcoming.isEmpty()) Text("No hay tareas pendientes.", color = Brand.SecondaryText)
+                        if (upcoming.isEmpty()) Text(if (tasks.isEmpty()) "Todavía no has añadido actividades." else "No hay tareas pendientes.", color = Brand.SecondaryText)
                         upcoming.forEachIndexed { index, op ->
                             Row(Modifier.fillMaxWidth().clickable { editor = op }.heightIn(min = 52.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Surface(color = Brand.Selected, shape = RoundedCornerShape(50)) { Text(op.time.ifBlank { "—" }, Modifier.padding(horizontal = 9.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium) }
@@ -203,7 +214,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                             if (index < upcoming.lastIndex) HorizontalDivider(color = Brand.Border)
                         }
                     } }
-                    if (vm.operators.isEmpty()) item { Section("Prepara tu libreta") { Text("Añade personal y equipos para empezar.", color = Brand.SecondaryText); TextButton(onClick = { tab = 4 }) { Text("Configurar catálogos") } } }
+                    if (vm.operators.isEmpty()) item { Section("Prepara tu libreta") { Text("Añade personal y equipos para empezar.", color = Brand.SecondaryText); TextButton(onClick = { tab = 4 }) { Text("Añadir personal y equipos") } } }
                 }
                 1 -> {
                     val tasks = doc.operations.filter { it.module == Module.TASK }
@@ -221,8 +232,21 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                     items(doc.operations.filter { it.module == Module.CLOSE }) { op -> OperationCard(op, doc) { editor = op } }
                 }
                 2 -> {
-                    item { WFHeading(module?.label ?: "Operación", doc.day) { dateDialog = true } }
-                    if (module == null) {
+                    item { WFHeading(module?.label ?: if (pendingOverview) "Pendientes del día" else "Operación", doc.day) { dateDialog = true } }
+                    if (module == null && pendingOverview) {
+                        item { TextButton(onClick = { pendingOverview = false }) { Text("Ver todos los módulos") } }
+                        val groups = DailySummary.pending(doc).groupBy { it.module }.toList()
+                        if (groups.isEmpty()) item { Text("No hay pendientes para esta fecha.") }
+                        items(groups, key = { it.first.name }) { (which, rows) ->
+                            WFCard(Modifier.fillMaxWidth().clickable(role = Role.Button) { openModule(which) }) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    WFIcon(moduleIcon(which), Brand.Sand)
+                                    Column(Modifier.weight(1f)) { Text(which.label, style = MaterialTheme.typography.titleSmall); Text("${rows.size} pendientes", color = Brand.SecondaryText) }
+                                    Icon(Icons.Outlined.ChevronRight, "Abrir ${which.label}")
+                                }
+                            }
+                        }
+                    } else if (module == null) {
                         item { Text("Todo lo que necesitas para la operación del día.", color = Brand.SecondaryText) }
                         items(Module.entries.filter { it !in listOf(Module.CLOSE, Module.TASK) }.chunked(2)) { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { row.forEach { entry ->
@@ -250,13 +274,17 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                                     MetricTile(attendance.count { it.status == "Tardanza" }.toString(), "Tardanzas", Icons.Outlined.Schedule, Brand.Sand, Modifier.weight(1f))
                                 } }
                                 item { Text("P: presente · T: tardanza · AJ/AI: ausencia · L: libre", style = MaterialTheme.typography.bodySmall, color = Brand.SecondaryText) }
-                                if (operators.isEmpty()) item { Text("Añade operadores en Más → Personal.", color = Brand.SecondaryText) }
+                                if (operators.isEmpty()) item {
+                                    if (vm.operators.isEmpty()) { Text("Añade operadores para marcar su asistencia."); Button(onClick = { newMaster("operator") }) { Text("Añadir operadores") } }
+                                    else { Text("No encontramos operadores con esa búsqueda."); TextButton(onClick = { operatorSearch = "" }) { Text("Limpiar búsqueda") } }
+                                }
                                 items(operators, key = { it.id }) { operator ->
                                     val op = attendance.firstOrNull { it.operatorId == operator.id }
                                     OperatorAttendanceRow(operator, op, !vm.busy) { status, extended ->
-                                        vm.save((op ?: Operation(day = doc.day, module = Module.ATTENDANCE, title = "Asistencia", status = status, operatorId = operator.id, shift = attendanceShift)).copy(status = status, extended = extended)) { }
+                                        vm.save((op ?: Operation(day = doc.day, module = Module.ATTENDANCE, title = "Asistencia", status = status, operatorId = operator.id, shift = attendanceShift)).copy(status = status, extended = extended), offerShare = false) { }
                                     }
                                 }
+                                item { OutlinedButton(onClick = { vm.shareRequest = doc }, enabled = attendance.isNotEmpty() && !vm.busy, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Outlined.Share, null); Spacer(Modifier.width(8.dp)); Text("Compartir avance del día") } }
                             }
                             Module.MEAL -> {
                                 item { PillTabs(listOf("Cena", "Almuerzo"), mealType) { mealType = it } }
@@ -268,7 +296,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                                     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = Color.White, shadowElevation = 1.dp) {
                                         Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Checkbox(operator.id in mealSelected, { checked -> mealSelected = if (checked) mealSelected + operator.id else mealSelected - operator.id })
-                                            Column(Modifier.weight(1f)) { Text(operator.name, style = MaterialTheme.typography.titleSmall); Text(operator.code, style = MaterialTheme.typography.bodySmall, color = Brand.SecondaryText) }
+                                            Column(Modifier.weight(1f)) { Text(operator.name, style = MaterialTheme.typography.titleSmall); if (operator.code.isNotBlank()) Text(operator.code, style = MaterialTheme.typography.bodySmall, color = Brand.SecondaryText) }
                                             Text(operator.shift, style = MaterialTheme.typography.bodySmall)
                                         }
                                     }
@@ -279,8 +307,13 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                                 } }
                             }
                             Module.STOCK -> {
+                                item { PillTabs(listOf("Todos", "Bajo mínimo"), if (onlyLowStock) "Bajo mínimo" else "Todos") { onlyLowStock = it == "Bajo mínimo" } }
+                                if (doc.items.isEmpty()) item { Button(onClick = { newMaster("item") }) { Text("Añadir artículos") } }
+                                if (onlyLowStock && doc.items.isNotEmpty() && doc.items.none { (doc.stockBalances[it.id] ?: 0.0) < it.minimum }) item {
+                                    WFCard(Modifier.fillMaxWidth(), Brand.Sage) { Text("Las existencias están al día."); TextButton(onClick = { onlyLowStock = false }) { Text("Ver todos los artículos") } }
+                                }
                                 item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { MetricTile(doc.items.size.toString(), "Artículos", Icons.Outlined.Inventory2, Brand.Sky, Modifier.weight(1f)); MetricTile(doc.items.count { (doc.stockBalances[it.id] ?: 0.0) < it.minimum }.toString(), "Bajo mínimo", Icons.Outlined.WarningAmber, Brand.Sand, Modifier.weight(1f)) } }
-                                items(doc.items, key = { it.id }) { item -> WFCard(Modifier.fillMaxWidth()) {
+                                items(doc.items.filter { !onlyLowStock || (doc.stockBalances[it.id] ?: 0.0) < it.minimum }, key = { it.id }) { item -> WFCard(Modifier.fillMaxWidth()) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { WFIcon(Icons.Outlined.Inventory2, Brand.Sand); Column(Modifier.weight(1f)) { Text(item.name, style = MaterialTheme.typography.titleMedium); Text("${doc.stockBalances[item.id] ?: 0.0} ${item.unit}", style = MaterialTheme.typography.titleSmall); Text("Mínimo: ${item.minimum}", style = MaterialTheme.typography.bodySmall, color = Brand.SecondaryText) } }
                                     if ((doc.stockBalances[item.id] ?: 0.0) < item.minimum) WFStatus("Bajo mínimo")
                                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -297,6 +330,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                                 items(doc.operations.filter { it.module == Module.STOCK }, key = { it.id }) { op -> OperationCard(op, doc) { editor = op } }
                             }
                             Module.FUEL -> {
+                                if (doc.assets.isEmpty()) item { Button(onClick = { newMaster("asset") }) { Text("Añadir equipos") } }
                                 val fuel = doc.operations.filter { it.module == Module.FUEL }
                                 item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { MetricTile(fuel.count { it.status == "Abastecido" }.toString(), "Abastecidos", Icons.Outlined.CheckCircle, Brand.Sage, Modifier.weight(1f)); MetricTile(fuel.count { it.status == "Pendiente" }.toString(), "Pendientes", Icons.Outlined.Schedule, Brand.Sand, Modifier.weight(1f)) } }
                                 items(doc.assets, key = { it.id }) { asset ->
@@ -322,74 +356,94 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                 3 -> {
                     item { WFHeading("Reportes", doc.day) { dateDialog = true } }
                     item { WFCard(Modifier.fillMaxWidth()) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { WFIcon(Icons.Outlined.Assessment); Column(Modifier.weight(1f)) { Text("Cómo va el día", style = MaterialTheme.typography.titleMedium); Text("${doc.supervisor} · Versión ${doc.revision}", style = MaterialTheme.typography.bodyMedium, color = Brand.SecondaryText) } }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { WFIcon(Icons.Outlined.Assessment); Column(Modifier.weight(1f)) { Text("Cómo va el día", style = MaterialTheme.typography.titleMedium); Text("${doc.supervisor} · Actualización ${doc.revision}", style = MaterialTheme.typography.bodyMedium, color = Brand.SecondaryText) } }
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Text("${DailySummary.present(doc)} presentes", style = MaterialTheme.typography.titleSmall); Text("${DailySummary.pending(doc).size} pendientes", style = MaterialTheme.typography.titleSmall) }
-                        WFStatus("JSON actualizado")
-                        TextButton(onClick = { viewing = doc }) { Text("Ver informe completo"); Icon(Icons.Outlined.ChevronRight, null) }
+                        WFStatus("Informe al día")
+                        TextButton(onClick = { viewingRef = "${doc.originId}|${doc.day}" }) { Text("Ver informe completo"); Icon(Icons.Outlined.ChevronRight, null) }
                     } }
-                    item { WFCard(Modifier.fillMaxWidth()) { Text("Compartir el progreso", style = MaterialTheme.typography.titleMedium); Text("JSON para abrir en otro WorkFlow. PDF para leer o imprimir.", style = MaterialTheme.typography.bodyMedium, color = Brand.SecondaryText)
-                        Button(onClick = { vm.shareRequest = doc }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Outlined.Share, null); Spacer(Modifier.width(8.dp)); Text("Compartir JSON / PDF") }
-                        OutlinedButton(onClick = { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Outlined.FileDownload, null); Spacer(Modifier.width(8.dp)); Text("Recibir archivo JSON") }
+                    item { WFCard(Modifier.fillMaxWidth()) { Text("Compartir el progreso", style = MaterialTheme.typography.titleMedium); Text("Envía un informe protegido para abrir en WorkFlow, o un documento para leer e imprimir.", style = MaterialTheme.typography.bodyMedium, color = Brand.SecondaryText)
+                        Button(onClick = { vm.shareRequest = doc }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Outlined.Share, null); Spacer(Modifier.width(8.dp)); Text("Compartir informe") }
+                        OutlinedButton(onClick = { importer.launch(arrayOf(ProtectedReport.MIME_TYPE, "application/octet-stream")) }, modifier = Modifier.fillMaxWidth(), enabled = !vm.busy) { Icon(Icons.Outlined.FileDownload, null); Spacer(Modifier.width(8.dp)); Text("Abrir informe recibido") }
                     } }
                     item { Text("Informes recibidos", style = MaterialTheme.typography.titleMedium) }
-                    if (vm.received.isEmpty()) item { WFCard(Modifier.fillMaxWidth()) { WFIcon(Icons.Outlined.FolderOpen, Brand.Sky); Text("Tus informes recibidos aparecerán aquí.", style = MaterialTheme.typography.titleSmall); Text("Abre un JSON enviado por el supervisor para consultar su última actualización.", color = Brand.SecondaryText, style = MaterialTheme.typography.bodyMedium) } }
+                    if (vm.received.isEmpty()) item { WFCard(Modifier.fillMaxWidth()) { WFIcon(Icons.Outlined.FolderOpen, Brand.Sky); Text("Tus informes recibidos aparecerán aquí.", style = MaterialTheme.typography.titleSmall); Text("Abre el informe que te envió el supervisor para consultar la última actualización.", color = Brand.SecondaryText, style = MaterialTheme.typography.bodyMedium) } }
                     items(vm.received, key = { "${it.originId}|${it.day}" }) { incoming ->
-                        Section("${incoming.supervisor} · ${incoming.day}") { Text("Versión ${incoming.revision}", color = Brand.SecondaryText); Text("${DailySummary.present(incoming)} presentes · ${DailySummary.pending(incoming).size} pendientes"); TextButton(onClick = { viewing = incoming }) { Text("Ver informe recibido") } }
+                        Section("${incoming.supervisor} · ${incoming.day}") { Text("Actualización ${incoming.revision}", color = Brand.SecondaryText); Text("${DailySummary.present(incoming)} presentes · ${DailySummary.pending(incoming).size} pendientes"); TextButton(onClick = { viewingRef = "${incoming.originId}|${incoming.day}" }) { Text("Ver informe recibido") } }
                     }
                 }
                 4 -> {
-                    item { Text("Configuración y catálogos", style = MaterialTheme.typography.titleLarge) }
-                    item { Section("Responsable") {
-                        var name by remember(doc.supervisor) { mutableStateOf(doc.supervisor) }
-                        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre del supervisor") }, modifier = Modifier.fillMaxWidth())
-                        Button(onClick = { vm.supervisor(name) }, enabled = !vm.busy) { Text("Guardar responsable") }
-                        Text("Origen del teléfono: ${vm.repository.origin}", style = MaterialTheme.typography.bodyMedium)
-                    } }
-                    item { Section("Compartir al guardar") {
-                        Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(checked = vm.shareAfterSave, onCheckedChange = { vm.shareAfterSave = it }); Text("Ofrecer compartir tras registrar cambios", modifier = Modifier.weight(1f)) }
-                        Text("El JSON siempre se actualiza. WhatsApp requiere elegir destinatario y confirmar el envío; no hay sincronización automática.")
-                    } }
-                    item { Section("Personal · ${vm.operators.size}") { Button(onClick = { master = "operator" }) { Text("Añadir operador") }; vm.operators.forEach { op -> TextButton(onClick = { editOperator = op; master = "operator" }) { Text("${op.code} · ${op.name} · ${if (op.active) op.shift else "Inactivo"}") } } } }
-                    item { Section("Equipos · ${vm.assets.size}") { Button(onClick = { master = "asset" }) { Text("Añadir equipo") }; vm.assets.forEach { asset -> TextButton(onClick = { editAsset = asset; master = "asset" }) { Text("${asset.code} · ${asset.type} · ${asset.state}") } } } }
-                    item { Section("Artículos · ${vm.items.size}") { Button(onClick = { master = "item" }) { Text("Añadir artículo") }; vm.items.forEach { item -> TextButton(onClick = { editItem = item; master = "item" }) { Text("${item.name} · ${item.unit}") } } } }
-                    item { Section("Historial local") { vm.history.forEach { past -> TextButton(onClick = { vm.chooseDay(past.day); tab = 0 }) { Text("${past.day} · Revisión ${past.revision}") } } } }
-                    item { Text("Datos privados en SQLite. Bloqueo con Android. Los JSON y PDF compartidos contienen información personal sin cifrado de archivo. Esta versión no restaura respaldos antiguos de ControlOPS ni los datos recibidos sobre los propios.", style = MaterialTheme.typography.bodyMedium) }
+                    if (catalog != null) catalogRows(catalog!!, vm, catalogSearch, { catalogSearch = it }, { catalog = null }, { newMaster(catalog!!) },
+                        editOperator = { editOperator = it; editAsset = null; editItem = null; master = "operator" },
+                        editAsset = { editAsset = it; editOperator = null; editItem = null; master = "asset" },
+                        editItem = { editItem = it; editOperator = null; editAsset = null; master = "item" })
+                    else {
+                        item { Text("Configuración y catálogos", style = MaterialTheme.typography.headlineMedium) }
+                        item { Section("Personal y equipos") {
+                            listOf(Triple("operator", "Personal", vm.operators.size), Triple("asset", "Equipos", vm.assets.size), Triple("item", "Artículos", vm.items.size)).forEach { (kind, label, count) ->
+                                OutlinedButton(onClick = { openCatalog(kind) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("catalog-open-$kind")) {
+                                    Text(label, Modifier.weight(1f)); Text(count.toString()); Icon(Icons.Outlined.ChevronRight, null)
+                                }
+                            }
+                        } }
+                        item { Section("Responsable") {
+                            var name by remember(doc.supervisor) { mutableStateOf(doc.supervisor) }
+                            OutlinedTextField(name, { name = it }, label = { Text("Nombre del supervisor") }, modifier = Modifier.fillMaxWidth())
+                            Button(onClick = { vm.supervisor(name) }, enabled = !vm.busy) { Text("Guardar responsable") }
+                        } }
+                        item { Section("Compartir al guardar") {
+                            Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(vm.shareAfterSave, { vm.shareAfterSave = it }); Text("Ofrecer compartir tras guardar", Modifier.weight(1f)) }
+                            Text("Tu informe se actualiza con cada registro. Al añadir varios seguidos podrás compartir al terminar.")
+                        } }
+                        item { Section("Protección de informes") {
+                            Text(if (vm.hasTransferKey) "Clave guardada en este teléfono" else "Configura una clave para compartir con tu equipo")
+                            Text("Usa la misma clave en los teléfonos del equipo. Los informes recibidos se guardan por separado.", style = MaterialTheme.typography.bodyMedium)
+                            OutlinedButton(onClick = vm::requestTransferSetup, enabled = !vm.busy) { Icon(Icons.Outlined.Lock, null); Spacer(Modifier.width(8.dp)); Text(if (vm.hasTransferKey) "Cambiar clave" else "Configurar clave") }
+                        } }
+                        item { Section("Jornadas anteriores") { vm.history.forEach { past -> TextButton(onClick = { vm.chooseDay(past.day); tab = 0 }) { Text(past.day) } } } }
+                        item { Text("Tu información permanece en este teléfono. Comparte solo con las personas de tu equipo.", style = MaterialTheme.typography.bodyMedium, color = Brand.SecondaryText) }
+                    }
                 }
             }
         }
     }
-    if (mealPreview) SafeAlertDialog(scrollText = false, onDismissRequest = { mealPreview = false }, title = { Text("$mealType · ${mealSelected.size} personas") }, text = { LazyColumn { items(vm.operators.filter { it.id in mealSelected }) { Text("${it.code} · ${it.name}", Modifier.padding(vertical = 6.dp)) } } }, confirmButton = { TextButton(onClick = { mealPreview = false }) { Text("Cerrar") } })
+    if (mealPreview) SafeAlertDialog(scrollText = false, onDismissRequest = { mealPreview = false }, title = { Text("$mealType · ${mealSelected.size} personas") }, text = { LazyColumn { items(vm.operators.filter { it.id in mealSelected }) { Text(it.displayLabel, Modifier.padding(vertical = 6.dp)) } } }, confirmButton = { TextButton(onClick = { mealPreview = false }) { Text("Cerrar") } })
     if (dateDialog) {
         var date by remember { mutableStateOf(vm.day) }
         SafeAlertDialog(onDismissRequest = { dateDialog = false }, title = { Text("Fecha de trabajo") }, text = { OutlinedTextField(date, { date = it }, label = { Text("AAAA-MM-DD") }) }, confirmButton = { TextButton(onClick = { vm.chooseDay(date); dateDialog = false }) { Text("Ver fecha") } }, dismissButton = { TextButton(onClick = { dateDialog = false }) { Text("Cancelar") } })
     }
-    editor?.let { op -> OperationEditor(op, vm, onDismiss = { editor = null }) }
+    editor?.let { op -> OperationEditor(op, vm, addMaster = ::newMaster, onDismiss = { editor = null }) }
     master?.let { kind -> MasterEditor(kind, vm, onDismiss = { master = null; editOperator = null; editAsset = null; editItem = null }, operator = editOperator, asset = editAsset, item = editItem) }
     vm.preview?.let { incoming ->
         SafeAlertDialog(onDismissRequest = vm::dismissPreview, title = { Text("Revisar informe recibido") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${incoming.supervisor}\n${incoming.day} · Revisión ${incoming.revision}\n${incoming.operations.size} registros\nOrigen: ${incoming.originId}")
-                Text("Archivo íntegro, remitente no autenticado. Confirma con quién te lo envió. No reemplaza tus datos; actualiza solo este origen y fecha.")
+                Text("${incoming.supervisor}\n${incoming.day} · Actualización ${incoming.revision}\n${incoming.operations.size} registros")
+                Text("Confirma el supervisor y la fecha. El informe se añadirá a tus informes recibidos y conservará tus registros propios.")
             }
-        }, confirmButton = { TextButton(onClick = vm::acceptPreview, enabled = !vm.busy) { Text("Importar informe") } }, dismissButton = { TextButton(onClick = vm::dismissPreview) { Text("Cancelar") } })
+        }, confirmButton = { TextButton(onClick = vm::acceptPreview, enabled = !vm.busy) { Text("Guardar informe") } }, dismissButton = { TextButton(onClick = vm::dismissPreview) { Text("Cancelar") } })
     }
     viewing?.let { report ->
-        ReportViewer(report, onDismiss = { viewing = null }, share = { vm.shareRequest = report })
+        ReportViewer(report, onDismiss = { viewingRef = null }, share = { vm.shareRequest = report })
     }
     vm.shareRequest?.let { report ->
-        SafeAlertDialog(onDismissRequest = { vm.shareRequest = null }, title = { Text("Compartir informe") }, text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${report.day} · Revisión ${report.revision}. Contiene datos personales; revisa el destinatario.")
-                listOf("JSON por WhatsApp" to true, "PDF por WhatsApp" to false, "JSON por otra app" to true, "PDF por otra app" to false).forEachIndexed { index, (label, isJson) ->
-                    OutlinedButton(onClick = {
-                        vm.shareRequest = null
-                        vm.action {
-                            val file = withContext(Dispatchers.IO) { if (isJson) Reports.json(context, report) else Reports.pdf(context, report) }
-                            Reports.share(context, file, whatsapp = index < 2)
-                        }
-                    }, modifier = Modifier.fillMaxWidth(), enabled = !vm.busy) { Text(label) }
+        var otherApps by remember { mutableStateOf(false) }
+        SafeAlertDialog(onDismissRequest = { if (!vm.busy) vm.shareRequest = null }, title = { Text("Compartir informe") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Informe del ${report.day}")
+                Text("Para consultar el progreso dentro de WorkFlow:", style = MaterialTheme.typography.bodyMedium)
+                Button(onClick = { vm.shareReport(context, report, pdf = false, whatsapp = true) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), enabled = !vm.busy) {
+                    Icon(Icons.Outlined.Lock, null); Spacer(Modifier.width(8.dp)); Text("Informe protegido por WhatsApp")
                 }
+                Text("Para leer, imprimir o enviar a alguien que no usa WorkFlow:", style = MaterialTheme.typography.bodyMedium)
+                OutlinedButton(onClick = { vm.shareReport(context, report, pdf = true, whatsapp = true) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), enabled = !vm.busy) { Text("Documento PDF por WhatsApp") }
+                TextButton(onClick = { otherApps = !otherApps }, enabled = !vm.busy) { Text("Usar otra aplicación") }
+                if (otherApps) {
+                    OutlinedButton(onClick = { vm.shareReport(context, report, pdf = false, whatsapp = false) }, modifier = Modifier.fillMaxWidth(), enabled = !vm.busy) { Text("Compartir informe protegido") }
+                    OutlinedButton(onClick = { vm.shareReport(context, report, pdf = true, whatsapp = false) }, modifier = Modifier.fillMaxWidth(), enabled = !vm.busy) { Text("Compartir documento PDF") }
+                }
+                if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
-        }, confirmButton = { TextButton(onClick = { vm.shareRequest = null }) { Text("Ahora no") } })
+        }, confirmButton = { TextButton(onClick = { vm.shareRequest = null }, enabled = !vm.busy) { Text("Ahora no") } })
     }
+    if (vm.needsTransferSetup) ReportKeyDialog(setup = true, busy = vm.busy, error = vm.transferKeyError, onDismiss = vm::dismissTransferSetup) { phrase, _ -> vm.configureTransferKey(context, phrase) }
+    if (vm.incomingNeedsKey) ReportKeyDialog(setup = false, busy = vm.busy, error = vm.incomingKeyError, onDismiss = vm::cancelIncoming, onSubmit = vm::unlockIncoming)
 }

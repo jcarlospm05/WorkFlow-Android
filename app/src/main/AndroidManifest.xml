@@ -16,12 +16,14 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" android:mimeType="application/json" />
+                <data android:scheme="content" android:mimeType="application/vnd.workflow.report" />
+                <data android:scheme="content" android:mimeType="application/octet-stream" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="application/json" />
+                <data android:mimeType="application/vnd.workflow.report" />
+                <data android:mimeType="application/octet-stream" />
             </intent-filter>
         </activity>
         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.files"

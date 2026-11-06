@@ -19,6 +19,31 @@ class RepositoryTest {
     private val repository = WorkflowRepository(context, db)
     private val day = "2026-11-05"
     @After fun close() { db.close() }
+    @Test fun fresh_install_has_no_preloaded_business_records() = runBlocking {
+        val doc = repository.document(day)
+        assertTrue(doc.operators.isEmpty()); assertTrue(doc.assets.isEmpty()); assertTrue(doc.items.isEmpty())
+        assertTrue(doc.operations.isEmpty()); assertTrue(doc.stockBalances.isEmpty())
+        assertTrue(repository.received().isEmpty())
+    }
+    @Test fun several_operators_without_employee_codes_can_be_added_and_edited() = runBlocking {
+        val first = Operator(UUID.randomUUID().toString(), name = "Operador uno")
+        val second = Operator(UUID.randomUUID().toString(), name = "Operador dos")
+        repository.addOperator(first, day); repository.addOperator(second, day)
+        repository.addOperator(first.copy(name = "Operador corregido"), day)
+        val doc = repository.document(day)
+        assertEquals(2, doc.operators.size)
+        assertTrue(doc.operators.all { it.code.isEmpty() })
+        assertEquals("Operador corregido", doc.operators.first { it.id == first.id }.name)
+        assertEquals(doc, DailyCodec.decode(DailyCodec.encode(doc)))
+    }
+    @Test fun assigned_employee_codes_cannot_be_reused() = runBlocking {
+        repository.addOperator(Operator(UUID.randomUUID().toString(), "OP-21", "Operador uno"), day)
+        try {
+            repository.addOperator(Operator(UUID.randomUUID().toString(), "op-21", "Operador dos"), day)
+            fail("Debe conservar la unicidad de un código asignado")
+        } catch (_: android.database.sqlite.SQLiteConstraintException) { }
+        assertEquals(1, repository.masters().first.size)
+    }
     @Test fun corrections_update_json_without_duplicating_attendance() = runBlocking {
         val operator = Operator(UUID.randomUUID().toString(), "TEST", "Operador sintético")
         repository.addOperator(operator, day)

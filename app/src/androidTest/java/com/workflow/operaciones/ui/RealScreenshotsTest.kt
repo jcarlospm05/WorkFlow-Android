@@ -104,6 +104,9 @@ class RealScreenshotsTest {
     }
     private fun module(label: String) {
         val entry = Module.entries.first { it.label == label }
+        if (compose.onAllNodesWithText("Módulos").fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNodeWithText("Módulos").performScrollTo().performClick()
+        }
         compose.onNodeWithTag("module-${entry.name}").performScrollTo().performClick()
         compose.waitForIdle()
     }

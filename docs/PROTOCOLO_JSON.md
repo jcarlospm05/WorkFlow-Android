@@ -1,3 +1,5 @@
+> Documento del formato interno. No se comparte directamente con las personas: el transporte actual se cifra como se describe en [Informes protegidos](INFORMES_PROTEGIDOS.md).
+
 # Intercambio diario · workflow.daily.progress v1
 
 Un archivo representa el estado completo de **una fecha y un origen**, no un delta ni un respaldo completo. Se envían todos los registros de esa fecha y los catálogos necesarios para interpretarlos sin depender de los del receptor.
