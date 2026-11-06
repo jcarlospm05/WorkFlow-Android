@@ -59,19 +59,20 @@ class DialogInsetsTest {
         }
         compose.waitForIdle()
     }
-    private fun focusedDialogDecor() = WindowInspector.getGlobalWindowViews().lastOrNull {
-        it !== activityDecor && it.isShown && it.hasWindowFocus()
+    private fun shownDialogDecor() = WindowInspector.getGlobalWindowViews().lastOrNull {
+        it !== activityDecor && it.isShown && it.isAttachedToWindow && it.width > 0 && it.height > 0
     }
-    private fun awaitDialogFocus() {
-        // Compose can become idle before Android 15 delivers window focus to a new dialog.
-        compose.waitUntil(15_000) { compose.runOnIdle { focusedDialogDecor() != null } }
+    private fun awaitDialogWindow() {
+        // A visible window can receive focus on its first injected tap on API 35.
+        // Bounds do not depend on focus; the tests still perform real taps and verify their effects.
+        compose.waitUntil(15_000) { compose.runOnIdle { shownDialogDecor() != null } }
     }
-    private fun dialogDecor() = requireNotNull(focusedDialogDecor()) { "Dialog has not received window focus" }
+    private fun dialogDecor() = requireNotNull(shownDialogDecor()) { "Dialog window is not visible" }
     private fun imeBottom(): Int = compose.runOnIdle {
         ViewCompat.getRootWindowInsets(dialogDecor())?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
     }
     private fun openKeyboard(tag: String) {
-        awaitDialogFocus()
+        awaitDialogWindow()
         compose.onNodeWithTag(tag).performScrollTo().performClick().performTextInput("Prueba de teclado")
         compose.runOnIdle {
             val focused = requireNotNull(dialogDecor().findFocus())
@@ -80,7 +81,7 @@ class DialogInsetsTest {
         compose.waitUntil(10_000) { imeBottom() > 0 }
     }
     private fun assertSafeActions(vararg tags: String) {
-        awaitDialogFocus()
+        awaitDialogWindow()
         val screenshot = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
         val screenHeight = screenshot.height
         screenshot.recycle()
