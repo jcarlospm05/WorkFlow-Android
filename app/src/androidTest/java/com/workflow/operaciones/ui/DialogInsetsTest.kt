@@ -93,7 +93,25 @@ class DialogInsetsTest {
         val screenHeight = image.height; image.recycle()
         val bottom = screenHeight - maxOf(window.first, window.second)
         tags.forEach { tag ->
+            // Window focus can arrive before the first visible Android window traversal.
+            try {
+                compose.waitUntil(15_000) {
+                    runCatching { compose.onNodeWithTag(tag).assertIsDisplayed(); true }.getOrDefault(false)
+                }
+            } catch (failure: Throwable) {
+                capture("failure-$tag-${android.os.Build.VERSION.SDK_INT}")
+                println("DIALOG_DIAGNOSTIC tag=$tag window=$window safeBottom=$bottom")
+                println(compose.onRoot(isDialog()).printToString())
+                compose.runOnIdle {
+                    val decor = dialogDecor()
+                    val visible = android.graphics.Rect()
+                    val shown = decor.getGlobalVisibleRect(visible)
+                    println("DIALOG_DIAGNOSTIC decor=${decor.width}x${decor.height} shown=$shown rect=$visible")
+                }
+                throw failure
+            }
             val bounds = compose.onNodeWithTag(tag).assertIsDisplayed().assertIsEnabled().fetchSemanticsNode().boundsInWindow
+            println("DIALOG_BOUNDS tag=$tag bounds=$bounds safeBottom=$bottom insets=$window")
             assertTrue("$tag overlaps Android controls/IME: $bounds, safe bottom=$bottom, insets=$window", bounds.bottom + window.third <= bottom - 8)
             assertTrue("$tag lies above the viewport", bounds.top + window.third >= 0)
         }
