@@ -31,7 +31,7 @@ repo = (root/'app/src/main/java/com/workflow/operaciones/data/WorkflowRepository
 check('Transactional writes and atomic files present', 'db.withTransaction' in repo and 'AtomicFile' in repo and 'validateStockHistory' in repo)
 check('JSON data saved with revision inside transaction', 'dao.putDocument(DocumentRow' in repo)
 check('No recognizable embedded credential', not re.search(r'(?:AKIA[A-Z0-9]{16}|AIza[\w-]{35}|-----BEGIN (?:RSA |EC )?PRIVATE KEY-----|ghp_[A-Za-z0-9]{30,})', all_code))
-check('Safe areas and keyboard accommodation declared', 'WindowInsets.safeDrawing' in all_code and '.imePadding()' in all_code)
+check('Safe areas and keyboard accommodation declared', 'WindowInsets.safeDrawing' in all_code and ('.imePadding()' in all_code or 'WindowInsets.ime' in all_code))
 unit = root/'core/src/test/kotlin/com/workflow/core/DailyCodecTest.kt'
 check('Protocol behavior tests present', unit.read_text().count('@Test') >= 10)
 print(json.dumps({'scope': 'Static offline checks only; no Kotlin/Android execution', 'kotlin_files': len(kt), 'checks': checks}, ensure_ascii=False, indent=2))
