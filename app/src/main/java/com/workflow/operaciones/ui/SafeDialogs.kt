@@ -1,5 +1,7 @@
 package com.workflow.operaciones.ui
 
+import android.view.WindowManager
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -14,12 +16,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 
 /** A dialog has its own Android window: activity insets do not protect its buttons. */
 @Composable private fun DialogWindowInsets() {
     val window = (LocalView.current.parent as? DialogWindowProvider)?.window
-    SideEffect { window?.let { WindowCompat.setDecorFitsSystemWindows(it, false) } }
+    SideEffect {
+        window?.let {
+            WindowCompat.setDecorFitsSystemWindows(it, false)
+            // Compose 1.7 can measure WRAP_CONTENT dialogs using the physical display height
+            // while Android 15 clips that window to a smaller visible frame.
+            val matchParent = WindowManager.LayoutParams.MATCH_PARENT
+            if (it.attributes.width != matchParent || it.attributes.height != matchParent) {
+                it.setLayout(matchParent, matchParent)
+                ViewCompat.requestApplyInsets(it.decorView)
+            }
+        }
+    }
 }
 
 @Composable internal fun SafeFullscreenDialog(onDismissRequest: () -> Unit, content: @Composable ColumnScope.() -> Unit) {

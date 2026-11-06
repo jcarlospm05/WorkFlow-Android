@@ -51,14 +51,3 @@ jobs:
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
           if-no-files-found: ignore
-  inspect_previous_failure:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          github-token: ${{ github.token }}
-          run-id: 42200323019
-          name: WorkFlow-dialog-proof-api-35
-          path: previous-dialog-proof
-      - run: python3 tools/log-dialog-proof.py previous-dialog-proof
