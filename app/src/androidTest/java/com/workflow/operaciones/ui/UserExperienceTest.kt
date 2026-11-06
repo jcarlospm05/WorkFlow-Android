@@ -10,7 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.test.*
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.core.content.FileProvider
 import androidx.room.Room
@@ -91,7 +90,9 @@ class UserExperienceTest {
             tap("dialog-save-another")
             compose.waitUntil(30_000) { !model.busy && when (kind) { "operator" -> model.operators.size == 1; "asset" -> model.assets.size == 1; else -> model.items.size == 1 } }
             assertTrue(open.value)
-            compose.onNodeWithTag(nameTag).assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+            compose.onNodeWithTag(nameTag).assert(SemanticsMatcher("el campo del siguiente registro está vacío") {
+                it.config.getOrNull(SemanticsProperties.EditableText)?.text?.isEmpty() == true
+            })
             if (kind == "operator") {
                 assertEquals("", model.operators.single().code)
                 capture("ux-personal-continuar")
@@ -185,3 +186,4 @@ class UserExperienceTest {
         assertTrue(model.hasTransferKey)
     }
 }
+
