@@ -6,3 +6,6 @@ local.properties
 *.keystore
 key.properties
 .env
+
+# Generated losslessly from licensed app/font-source resources.
+app/src/main/res/font/*.ttf

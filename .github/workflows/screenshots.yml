@@ -1,0 +1,64 @@
+name: Capturas reales Android
+on:
+  pull_request:
+    paths:
+      - 'app/src/androidTest/**'
+      - 'app/build.gradle.kts'
+      - '.github/workflows/screenshots.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Habilitar aceleración del emulador
+        run: sudo chmod 666 /dev/kvm
+      - name: Ejecutar app y capturar pantallas
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          cores: 2
+          ram-size: 4096M
+          heap-size: 512M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.workflow.operaciones.ui.RealScreenshotsTest --stacktrace
+            mkdir -p captured
+            adb pull /sdcard/Android/data/com.workflow.operaciones.visual/files/screenshots captured/
+      - name: Recoger capturas incluso si falla una pantalla
+        if: always()
+        run: |
+          mkdir -p captured
+          adb pull /sdcard/Android/data/com.workflow.operaciones.visual/files/screenshots captured/ || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: WorkFlow-real-screenshots
+          path: captured/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: WorkFlow-screenshot-test-results
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: ignore

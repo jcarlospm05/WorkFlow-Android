@@ -1,3 +1,8 @@
+import java.util.Base64
+import java.io.ByteArrayInputStream
+import java.util.zip.GZIPInputStream
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     kotlin("android")
@@ -5,6 +10,23 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
+// Licensed font resources are stored losslessly as gzip/base64 for connector-safe transport.
+// Decode offline before resource discovery. No runtime download or executable payload.
+val fontHashes = mapOf(
+    "nunito_medium" to "74920a51bc96148840daa512e1e7f132bc4acc422389a558f85df9602769bbce",
+    "nunito_regular" to "ce4a6ed4e751214fe08c58e1f7e42b0dd2119cafa2f0bf8aa06f77ab63e9ec6c",
+    "nunito_semibold" to "8697328550b10d787f15eecdbbf8bff1339c5f3423a89cb8eb0ad7e2e0d1ea24"
+)
+fontHashes.forEach { (name, expected) ->
+    val encoded = file("font-source/$name.ttf.gz.b64").readText()
+    val bytes = GZIPInputStream(ByteArrayInputStream(Base64.getMimeDecoder().decode(encoded))).use { it.readBytes() }
+    val actual = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it.toInt() and 255) }
+    require(actual == expected) { "Font resource checksum mismatch: $name" }
+    val target = file("src/main/res/font/$name.ttf")
+    target.parentFile.mkdirs()
+    if (!target.exists() || !target.readBytes().contentEquals(bytes)) target.writeBytes(bytes)
+}
+
 android {
     namespace = "com.workflow.operaciones"
     compileSdk = 35
@@ -12,8 +34,8 @@ android {
         applicationId = "com.workflow.operaciones"
         minSdk = 26
         targetSdk = 35
-        versionCode = 100
-        versionName = "1.0.0-dev"
+        versionCode = 101
+        versionName = "1.0.1-visual"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
@@ -25,7 +47,7 @@ android {
         }
     }
     buildTypes {
-        debug { applicationIdSuffix = ".dev"; versionNameSuffix = "-debug" }
+        debug { applicationIdSuffix = ".visual"; versionNameSuffix = "-debug" }
         release {
             isMinifyEnabled = true
             signingConfig = signingConfigs.getByName("production")
@@ -55,6 +77,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.8.5")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.room:room-testing:2.6.1")

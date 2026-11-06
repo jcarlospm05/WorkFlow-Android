@@ -1,6 +1,6 @@
 # WorkFlow Android — base nativa 1.0.0-dev
 
-Proyecto nuevo Kotlin + Jetpack Compose + Room/SQLite. Separado del código Flutter v0.2 auditado. Esta entrega es código fuente, **no una APK compilada o certificada**.
+Proyecto nuevo Kotlin + Jetpack Compose + Room/SQLite. Separado del código Flutter v0.2 auditado. La APK de desarrollo se compiló correctamente en GitHub Actions, ejecución 42090575402; quedan pendientes las pruebas en dispositivo y la distribución de producción.
 
 ## Qué implementa
 
@@ -60,12 +60,22 @@ Para release configura fuera del código: WORKFLOW_KEYSTORE_PATH, WORKFLOW_STORE
 
 ## Estado de verificación en esta entrega
 
-Se ejecutaron comprobaciones estáticas offline de XML, manifiesto, proveedor de archivos, configuración de seguridad/CI y estructura del proyecto; resultados en `docs/offline-checks.json`. También se verificó sintaxis del script shell. **No se ejecutaron compilación Kotlin, tests JVM, lint Android ni pruebas instrumentadas**: este entorno no contiene Gradle ni Android SDK. El intento de build termina con diagnóstico de Gradle ausente. Los tests incluidos son comprobaciones pendientes, no resultados aprobados.
+Compilación confirmada en GitHub Actions: https://github.com/jcarlospm05/WorkFlow-Android/actions/runs/42090575402
+
+- Commit del código compilado: decfcfcd9793747b8e2ed6fe4b03af7e89268d55, rama codex/workflow-native-apk, PR #1.
+- `:core:test`: 13 pruebas ejecutadas, 0 fallos.
+- `:app:lintDebug`: 0 errores, 14 advertencias (dependencias/target recientes y reglas de extracción de datos).
+- `:app:assembleDebug`: APK generada, versión 1.0.0-dev-debug, Android 8.0 o posterior, paquete com.workflow.operaciones.dev.
+- APK: 18.207.765 bytes. SHA-256: fc7e5dd6aeaf4bbc17e494fddb8197fcad37dce19ad324e73a65453802f364ce.
+- Archivo ZIP del artefacto descargado: digest contrastado con el publicado por GitHub. APK revisada por CRC y manifiesto binario; sin permiso INTERNET y con allowBackup=false.
+- **No se ejecutaron las cuatro pruebas instrumentadas ni se probó en un teléfono/emulador. No es una versión de producción.**
+
+Las comprobaciones estáticas offline se conservan en docs/offline-checks.json. La compilación fue remota; el entorno local sigue sin Gradle ni SDK Android.
 
 ## Límites pendientes antes de versión final
 
-- Instalar y empaquetar Nunito Sans con su licencia: se utiliza sans del sistema como sustituto offline. Los colores/logo/formas sí están fijados; no se afirma que el tipo de letra actual sea Nunito.
-- Compilar, corregir cualquier diagnóstico del compilador/lint y probar en Android real: insets, tamaño de letra grande, teclado, autorización temporal de archivos, dos teléfonos y WhatsApp.
+- La revisión visual 1.0.1 incluye Nunito Sans real (pesos 400/500/600, subconjunto latino) y su licencia OFL. Se mantiene el logo y la paleta fijados.
+- Probar en Android real: insets, tamaño de letra grande, teclado, autorización temporal de archivos, dos teléfonos y WhatsApp.
 - Notificaciones programadas, informes por rangos/XLSX/CSV, voz TTS, gráficos, copias completas cifradas/restauración y migración desde ControlOPS quedan fuera de esta primera base. No son funciones terminadas.
 - Las averías registran hora y seguimiento, pero no calculan intervalos exactos ni múltiples paradas. Tickets son registros operativos, sin firma jurídica.
 - Los JSON se verifican con SHA-256 para detectar corrupción; **no hay firma digital que autentique al remitente**. Un tercero puede crear un nuevo archivo con checksum válido. El usuario debe verificar el origen por un canal conocido. Las revisiones son orden lógico, no sincronización autenticada.
