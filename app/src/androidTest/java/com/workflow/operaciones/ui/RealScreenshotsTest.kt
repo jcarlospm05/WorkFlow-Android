@@ -2,7 +2,6 @@ package com.workflow.operaciones.ui
 
 import android.content.ContentValues
 import android.provider.MediaStore
-import androidx.annotation.RequiresApi
 import androidx.test.filters.SdkSuppress
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -35,7 +34,6 @@ import java.util.UUID
  */
 @RunWith(AndroidJUnit4::class)
 @SdkSuppress(minSdkVersion = 29)
-@RequiresApi(29)
 class RealScreenshotsTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
