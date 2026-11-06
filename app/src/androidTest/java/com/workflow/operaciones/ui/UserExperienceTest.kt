@@ -91,7 +91,7 @@ class UserExperienceTest {
             compose.waitUntil(30_000) { !model.busy && when (kind) { "operator" -> model.operators.size == 1; "asset" -> model.assets.size == 1; else -> model.items.size == 1 } }
             assertTrue(open.value)
             compose.onNodeWithTag(nameTag).assert(SemanticsMatcher("el campo del siguiente registro está vacío") {
-                it.config.getOrNull(SemanticsProperties.EditableText)?.text?.isEmpty() == true
+                it.config.getOrElseNullable(SemanticsProperties.EditableText) { null }?.text?.isEmpty() == true
             })
             if (kind == "operator") {
                 assertEquals("", model.operators.single().code)
