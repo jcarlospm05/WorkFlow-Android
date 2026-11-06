@@ -81,39 +81,42 @@ class DialogInsetsTest {
     }
     private fun assertSafeActions(vararg tags: String) {
         awaitDialogFocus()
-        compose.waitForIdle()
-        val window = compose.runOnIdle {
-            val decor = dialogDecor()
-            val insets = requireNotNull(ViewCompat.getRootWindowInsets(decor))
-            val offset = IntArray(2); decor.getLocationOnScreen(offset)
-            Triple(insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom,
-                insets.getInsets(WindowInsetsCompat.Type.ime()).bottom, offset[1])
-        }
-        val image = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
-        val screenHeight = image.height; image.recycle()
-        val bottom = screenHeight - maxOf(window.first, window.second)
-        tags.forEach { tag ->
-            // Window focus can arrive before the first visible Android window traversal.
-            try {
-                compose.waitUntil(15_000) {
-                    runCatching { compose.onNodeWithTag(tag).assertIsDisplayed(); true }.getOrDefault(false)
-                }
-            } catch (failure: Throwable) {
-                capture("failure-$tag-${android.os.Build.VERSION.SDK_INT}")
-                println("DIALOG_DIAGNOSTIC tag=$tag window=$window safeBottom=$bottom")
-                println(compose.onNode(isDialog()).printToString())
-                compose.runOnIdle {
-                    val decor = dialogDecor()
-                    val visible = android.graphics.Rect()
-                    val shown = decor.getGlobalVisibleRect(visible)
-                    println("DIALOG_DIAGNOSTIC decor=${decor.width}x${decor.height} shown=$shown rect=$visible")
-                }
-                throw failure
+        val screenshot = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val screenHeight = screenshot.height
+        screenshot.recycle()
+        var diagnostic = "No frame sampled"
+        try {
+            // IME insets and the dialog layout are delivered on separate Android frames.
+            compose.waitUntil(15_000) {
+                runCatching {
+                    val window = compose.runOnIdle {
+                        val decor = dialogDecor()
+                        val insets = requireNotNull(ViewCompat.getRootWindowInsets(decor))
+                        val offset = IntArray(2); decor.getLocationOnScreen(offset)
+                        Triple(insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom,
+                            insets.getInsets(WindowInsetsCompat.Type.ime()).bottom, offset[1])
+                    }
+                    val bottom = screenHeight - maxOf(window.first, window.second)
+                    val bounds = tags.associateWith { tag ->
+                        compose.onNodeWithTag(tag).assertIsDisplayed().assertIsEnabled().fetchSemanticsNode().boundsInWindow
+                    }
+                    diagnostic = "window=$window safeBottom=$bottom bounds=$bounds"
+                    bounds.values.all { it.height > 0 && it.bottom + window.third <= bottom - 8 && it.top + window.third >= 0 }
+                }.onFailure { diagnostic = it.toString() }.getOrDefault(false)
             }
-            val bounds = compose.onNodeWithTag(tag).assertIsDisplayed().assertIsEnabled().fetchSemanticsNode().boundsInWindow
-            println("DIALOG_BOUNDS tag=$tag bounds=$bounds safeBottom=$bottom insets=$window")
-            assertTrue("$tag overlaps Android controls/IME: $bounds, safe bottom=$bottom, insets=$window", bounds.bottom + window.third <= bottom - 8)
-            assertTrue("$tag lies above the viewport", bounds.top + window.third >= 0)
+            println("DIALOG_BOUNDS $diagnostic")
+        } catch (failure: Throwable) {
+            capture("failure-actions-${android.os.Build.VERSION.SDK_INT}")
+            val tree = runCatching { compose.onNode(isDialog()).printToString() }.getOrDefault("No dialog semantics")
+            val decorInfo = compose.runOnIdle {
+                val decor = dialogDecor()
+                val visible = android.graphics.Rect()
+                val shown = decor.getGlobalVisibleRect(visible)
+                "decor=${decor.width}x${decor.height} shown=$shown rect=$visible"
+            }
+            println("DIALOG_DIAGNOSTIC $diagnostic $decorInfo")
+            println(tree)
+            throw AssertionError("DIALOG_DIAGNOSTIC $diagnostic $decorInfo ${tree.lineSequence().joinToString("|")}", failure)
         }
     }
     private fun capture(name: String) {

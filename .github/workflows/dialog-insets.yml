@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -40,7 +41,7 @@ jobs:
           ram-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash -c 'gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.workflow.operaciones.ui.DialogInsetsTest --stacktrace; result=$?; mkdir -p dialog-proof; adb pull /sdcard/Pictures/WorkFlowDialogProof dialog-proof/; exit "$result"'
+          script: bash -c 'gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.workflow.operaciones.ui.DialogInsetsTest --stacktrace; result=$?; mkdir -p dialog-proof; adb pull /sdcard/Pictures/WorkFlowDialogProof dialog-proof/; if [ "$result" -ne 0 ]; then python3 tools/log-dialog-proof.py dialog-proof app/build/outputs/androidTest-results; fi; exit "$result"'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -50,3 +51,14 @@ jobs:
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
           if-no-files-found: ignore
+  inspect_previous_failure:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 42200323019
+          name: WorkFlow-dialog-proof-api-35
+          path: previous-dialog-proof
+      - run: python3 tools/log-dialog-proof.py previous-dialog-proof
