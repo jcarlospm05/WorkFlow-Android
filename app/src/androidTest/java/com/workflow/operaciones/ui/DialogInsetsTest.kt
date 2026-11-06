@@ -101,7 +101,7 @@ class DialogInsetsTest {
             } catch (failure: Throwable) {
                 capture("failure-$tag-${android.os.Build.VERSION.SDK_INT}")
                 println("DIALOG_DIAGNOSTIC tag=$tag window=$window safeBottom=$bottom")
-                println(compose.onRoot(isDialog()).printToString())
+                println(compose.onNode(isDialog()).printToString())
                 compose.runOnIdle {
                     val decor = dialogDecor()
                     val visible = android.graphics.Rect()
