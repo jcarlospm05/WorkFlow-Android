@@ -47,7 +47,7 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
     suspend fun masters(): Triple<List<Operator>, List<Asset>, List<StockItem>> = withContext(Dispatchers.IO) { loadMasters() }
     private suspend fun loadMasters(): Triple<List<Operator>, List<Asset>, List<StockItem>> {
         val rows = dao.masters()
-        return Triple(rows.filter { it.kind == "operator" }.map { json.decodeFromString<Operator>(it.payload) },
+        return Triple(rows.filter { it.kind == "operator" }.map { json.decodeFromString<Operator>(it.payload) }.sortedBy { it.name.lowercase(java.util.Locale.ROOT) },
             rows.filter { it.kind == "asset" }.map { json.decodeFromString<Asset>(it.payload) },
             rows.filter { it.kind == "item" }.map { json.decodeFromString<StockItem>(it.payload) })
     }
