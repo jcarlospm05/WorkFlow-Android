@@ -26,11 +26,18 @@ import androidx.lifecycle.ViewModelProvider
 import com.workflow.operaciones.ui.*
 
 class MainActivity : FragmentActivity() {
-    private var unlocked by mutableStateOf(false)
+    private var unlocked: Boolean
+        get() = PhoneSession.unlocked
+        set(value) { PhoneSession.unlocked = value }
+    private var promptActive = false
+    private var attempted = false
+    private var unlockError by mutableStateOf<String?>(null)
     private var inbound by mutableStateOf<Uri?>(null)
     private lateinit var model: WorkflowViewModel
     private val credentialLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        promptActive = false
         if (result.resultCode == RESULT_OK) unlocked = true
+        else unlockError = "Desbloqueo cancelado"
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,7 +60,8 @@ class MainActivity : FragmentActivity() {
                         Spacer(Modifier.height(24.dp))
                         Text("Tu información está protegida", style = MaterialTheme.typography.titleLarge)
                         Text("Desbloquea con la seguridad de Android. El teléfono debe tener PIN, patrón, contraseña o biometría.")
-                        Button(onClick = ::unlock) { Text("Desbloquear WorkFlow") }
+                        LaunchedEffect(unlocked) { if (!unlocked && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) unlock() }
+                        unlockError?.let { Text(it, color = Brand.Red); TextButton(onClick = { attempted = false; unlock() }) { Text("Intentar de nuevo") } }
                         TextButton(onClick = { startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }) { Text("Configurar bloqueo del teléfono") }
                     }
                 }
@@ -62,23 +70,36 @@ class MainActivity : FragmentActivity() {
     }
     @Suppress("DEPRECATION")
     private fun unlock() {
-        if (Build.VERSION.SDK_INT < 30) {
-            val keyguard = getSystemService(KeyguardManager::class.java)
-            if (keyguard.isDeviceSecure) {
-                keyguard.createConfirmDeviceCredentialIntent("WorkFlow", "Desbloquear datos del supervisor")?.let(credentialLauncher::launch)
-            } else startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
-            return
+        if (unlocked || promptActive || attempted || getSystemService(KeyguardManager::class.java).isDeviceLocked) return
+        attempted = true; unlockError = null
+        val keyguard = getSystemService(KeyguardManager::class.java)
+        fun credential() {
+            val intent = keyguard.createConfirmDeviceCredentialIntent("WorkFlow", "Desbloquear datos del supervisor")
+            if (intent != null) { promptActive = true; credentialLauncher.launch(intent) }
+            else unlockError = "Configura un PIN, patrón, contraseña o biometría en el teléfono"
         }
-        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        val authenticators = if (Build.VERSION.SDK_INT >= 30) BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL else BiometricManager.Authenticators.BIOMETRIC_STRONG
         if (BiometricManager.from(this).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
-            model.message = "Configura un bloqueo seguro del teléfono"; return
+            credential(); return
         }
         val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
-            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { unlocked = true }
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { promptActive = false; unlocked = true }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                promptActive = false
+                if (Build.VERSION.SDK_INT < 30 && errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) credential()
+                else unlockError = "No se completó el desbloqueo. Puedes intentarlo de nuevo."
+            }
         })
-        prompt.authenticate(BiometricPrompt.PromptInfo.Builder().setTitle("Desbloquear WorkFlow").setAllowedAuthenticators(authenticators).build())
+        val info = BiometricPrompt.PromptInfo.Builder().setTitle("Desbloquear WorkFlow").setAllowedAuthenticators(authenticators)
+        if (Build.VERSION.SDK_INT < 30) info.setNegativeButtonText("Usar código del teléfono")
+        promptActive = true; prompt.authenticate(info.build())
     }
-    override fun onStop() { super.onStop(); if (!isChangingConfigurations) unlocked = false }
+    override fun onResume() {
+        super.onResume()
+        if (getSystemService(KeyguardManager::class.java).isDeviceLocked) unlocked = false
+        window.decorView.post { if (!unlocked) unlock() }
+    }
+    override fun onStop() { super.onStop(); if (!promptActive) attempted = false }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); capture(intent) }
     @Suppress("DEPRECATION")
     private fun capture(intent: Intent?) {

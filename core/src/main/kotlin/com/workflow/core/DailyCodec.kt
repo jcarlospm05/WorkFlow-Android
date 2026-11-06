@@ -41,9 +41,13 @@ object DailyCodec {
         return document
     }
     fun validate(d: DailyDocument) {
-        require(d.format == "workflow.daily.progress" && d.schemaVersion == 1) { "Formato o versión no compatible" }
+        require(d.format == "workflow.daily.progress" && d.schemaVersion in 1..2) { "Formato o versión no compatible" }
         Rules.id(d.originId); Rules.day(d.day); Rules.text(d.supervisor, 100); Instant.parse(d.generatedAt)
         require(d.revision > 0 && d.revision < Long.MAX_VALUE)
+        if (d.journeyId.isNotEmpty()) Rules.id(d.journeyId)
+        if (d.startedAt.isNotEmpty()) Instant.parse(d.startedAt)
+        require(d.versionVector.size <= 100) { "Demasiados teléfonos en la jornada" }
+        d.versionVector.forEach { (id, revision) -> Rules.id(id); require(revision in 1 until Long.MAX_VALUE) }
         require(d.operators.size <= 2000 && d.assets.size <= 2000 && d.items.size <= 2000 && d.operations.size <= 3000) { "Demasiados registros" }
         d.operators.forEach(Rules::operator); d.assets.forEach(Rules::asset); d.items.forEach(Rules::item)
         require(d.operators.distinctBy { it.id }.size == d.operators.size)
@@ -55,8 +59,13 @@ object DailyCodec {
         val natural = d.operations.mapNotNull { it.naturalKey() }
         require(natural.distinct().size == natural.size) { "Asistencia, comida o cierre duplicado" }
         d.operations.forEach { require(it.day == d.day); Rules.operation(it, d.operators, d.assets, d.items) }
+        d.operations.filter { it.sourceId != null }.forEach { task ->
+            require(task.module == Module.TASK && d.operations.any { it.id == task.sourceId && it.module != Module.TASK }) { "Tarea vinculada sin actividad de origen" }
+        }
+        require(d.operations.filter { it.templateKey.isNotBlank() }.distinctBy { it.templateKey }.size == d.operations.count { it.templateKey.isNotBlank() }) { "Tareas automáticas duplicadas" }
         require(d.stockBalances.keys == d.items.map { it.id }.toSet()) { "Existencias incompletas" }
         require(d.stockBalances.values.all { it.isFinite() && it >= 0 }) { "Saldo inválido" }
+        require(d.stockOpeningBalances.keys.all { id -> d.items.any { it.id == id } } && d.stockOpeningBalances.values.all { it.isFinite() && it >= 0 }) { "Existencias iniciales inválidas" }
     }
 }
 

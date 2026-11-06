@@ -50,7 +50,7 @@ internal fun LazyListScope.catalogRows(
                 WFCard(Modifier.fillMaxWidth().clickable(role = Role.Button) { editAsset(asset) }) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         WFIcon(Icons.Outlined.LocalShipping)
-                        Column(Modifier.weight(1f)) { Text(asset.code, style = MaterialTheme.typography.titleSmall); Text("${asset.type} · ${asset.state}", color = Brand.SecondaryText) }
+                        Column(Modifier.weight(1f)) { Text(asset.code, style = MaterialTheme.typography.titleSmall); Text(asset.type, color = Brand.SecondaryText); WFStatus(asset.state) }
                         Icon(Icons.Outlined.ChevronRight, "Editar equipo")
                     }
                 }

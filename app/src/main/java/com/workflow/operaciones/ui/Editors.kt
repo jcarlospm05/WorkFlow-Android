@@ -16,8 +16,9 @@ import com.workflow.core.*
 import com.workflow.core.Module
 import java.util.UUID
 
+internal val LocalInlineEditor = staticCompositionLocalOf { false }
 @Composable private fun EditorFrame(title: String, busy: Boolean, close: () -> Unit, save: () -> Unit, saveAnother: (() -> Unit)? = null, saveLabel: String = "Guardar", content: @Composable ColumnScope.() -> Unit) {
-    SafeFullscreenDialog(onDismissRequest = { if (!busy) close() }) {
+    val body: @Composable ColumnScope.() -> Unit = {
         Text(title, style = MaterialTheme.typography.titleLarge)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
         Column(Modifier.fillMaxWidth().testTag("dialog-actions"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -32,6 +33,8 @@ import java.util.UUID
             }
         }
     }
+    if (LocalInlineEditor.current) Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp), content = body)
+    else SafeFullscreenDialog(onDismissRequest = { if (!busy) close() }, content = body)
 }
 @Composable private fun Choice(label: String, value: String, options: List<Pair<String, String>>, onChoose: (String) -> Unit) {
     var open by rememberSaveable { mutableStateOf(false) }
@@ -65,15 +68,18 @@ import java.util.UUID
     var quantity by rememberSaveable(original.id) { mutableStateOf(if (original.quantity == 0.0) "" else original.quantity.toString()) }
     var time by rememberSaveable(original.id) { mutableStateOf(original.time) }
     var notes by rememberSaveable(original.id) { mutableStateOf(original.notes) }
+    var severity by rememberSaveable(original.id) { mutableStateOf(original.severity) }
+    var expected by rememberSaveable(original.id) { mutableStateOf(original.expected) }
+    var actual by rememberSaveable(original.id) { mutableStateOf(original.actual) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     val kind = original.module
     fun persist(another: Boolean) {
         try {
             require(title.isNotBlank()) { "Escribe una descripción para el registro" }
             val number = if (quantity.isBlank()) 0.0 else quantity.replace(',', '.').toDoubleOrNull() ?: throw IllegalArgumentException("Cantidad inválida")
-            val operation = original.copy(id = draftId, title = title.trim(), status = status, operatorId = opId.ifEmpty { null }, assetId = assetId.ifEmpty { null }, itemId = itemId.ifEmpty { null }, operatorIds = selected.toList().sorted(), shift = shift, mealType = mealType, extended = ext, quantity = number, time = time.trim(), notes = notes.trim())
+            val operation = original.copy(id = draftId, title = title.trim(), status = status, operatorId = opId.ifEmpty { null }, assetId = assetId.ifEmpty { null }, itemId = itemId.ifEmpty { null }, operatorIds = selected.toList().sorted(), shift = shift, mealType = mealType, extended = ext, quantity = number, time = time.trim(), notes = notes.trim(), severity = severity, expected = expected.trim(), actual = actual.trim(), recordedBy = original.recordedBy.ifBlank { vm.document?.supervisor.orEmpty() })
             Rules.operation(operation, vm.operators, vm.assets, vm.items)
-            if (kind == Module.CLOSE && DailySummary.pending(vm.document!!).isNotEmpty()) require(notes.isNotBlank()) { "Explica los pendientes del cierre" }
+            if (kind == Module.CLOSE && status == "Cerrada" && DailySummary.pending(vm.document!!).isNotEmpty()) require(notes.isNotBlank()) { "Explica los pendientes del cierre del día" }
             vm.save(operation, offerShare = !another) {
                 if (another) {
                     draftId = UUID.randomUUID().toString()
@@ -86,19 +92,16 @@ import java.util.UUID
         } catch (e: Exception) { error = e.message }
     }
     val canAddAnother = isNew && kind !in listOf(Module.MEAL, Module.CLOSE)
-    val closeEditor: () -> Unit = {
-        onDismiss()
-        if (savedCount > 0 && vm.shareAfterSave) vm.shareRequest = vm.document
-    }
-    EditorFrame("${kind.label} · ${original.day}", vm.busy, closeEditor, save = { persist(false) },
+    EditorFrame("${if (kind == Module.CLOSE) "Cierre del día" else kind.label} · ${original.day}", vm.busy, onDismiss, save = { persist(false) },
         saveAnother = if (canAddAnother) ({ persist(true) }) else null, saveLabel = if (isNew) "Guardar" else "Guardar cambios") {
         Text(if (savedCount > 0) "Registro guardado. Puedes añadir el siguiente." else "Los cambios se guardan en tu informe del día.", style = MaterialTheme.typography.bodyMedium)
         (error ?: vm.actionError)?.let { Text(it, color = Brand.Red) }
         OutlinedTextField(title, { title = it }, label = { Text(if (kind == Module.TICKET) "Motivo de la infracción" else "Título / descripción breve") }, modifier = Modifier.fillMaxWidth().focusRequester(titleFocus).testTag("operation-title"))
         Options("Estado", status, Rules.statuses.getValue(kind)) { status = it }
-        if (kind in listOf(Module.ATTENDANCE, Module.PLAN, Module.TICKET, Module.POSITION, Module.FUEL)) {
-            Choice("Operador${if (kind == Module.FUEL) " (opcional)" else ""}", opId,
-                (if (kind == Module.FUEL) listOf("" to "Sin asignar") else emptyList()) + vm.operators.map { it.id to it.displayLabel }) { opId = it }
+        if (kind in listOf(Module.ATTENDANCE, Module.PLAN, Module.TICKET, Module.POSITION, Module.FUEL, Module.FAULT)) {
+            val optional = kind in listOf(Module.FUEL, Module.FAULT)
+            Choice("Operador${if (optional) " (opcional)" else ""}", opId,
+                (if (optional) listOf("" to "Sin asignar") else emptyList()) + vm.operators.map { it.id to it.displayLabel }) { opId = it }
             if (vm.operators.isEmpty()) { Text("Necesitas añadir un operador para continuar."); if (addMaster != null) TextButton(onClick = { addMaster("operator") }) { Text("Añadir operador") } }
         }
         if (kind in listOf(Module.ATTENDANCE, Module.PLAN, Module.POSITION)) Options("Turno real", shift, Rules.shifts) { shift = it }
@@ -128,8 +131,16 @@ import java.util.UUID
         }
         OutlinedTextField(time, { time = it }, label = { Text("Hora aproximada HH:mm (opcional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(notes, { notes = it }, label = { Text(if (kind == Module.CLOSE) "Pendientes y excepciones del cierre" else "Detalles / seguimiento / resolución") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("operation-notes"))
-        if (kind == Module.TICKET) Text("Responsable: ${vm.document?.supervisor}. El ticket no acredita por sí solo una sanción oficial.")
-        if (kind == Module.CLOSE) Text("${vm.document?.let { DailySummary.pending(it).size } ?: 0} pendientes. Cerrar no los elimina. Reabre la jornada para corregir registros.")
+        if (kind == Module.TICKET) {
+            Options("Nivel de la infracción", severity, listOf("Leve", "Moderada", "Grave")) { severity = it }
+            OutlinedTextField(expected, { expected = it }, label = { Text("Objetivo esperado (opcional)") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(actual, { actual = it }, label = { Text("Resultado real (opcional)") }, modifier = Modifier.fillMaxWidth())
+            Text("Responsable: ${original.recordedBy.ifBlank { vm.document?.supervisor.orEmpty() }}. El ticket no acredita por sí solo una sanción oficial.")
+        }
+        if (kind == Module.CLOSE) {
+            Text("${vm.document?.let { DailySummary.pending(it).size } ?: 0} pendientes al cierre del día. Cerrar no los elimina. Reabre la jornada para corregir registros.")
+            vm.document?.let { doc -> DailySummary.pending(doc).forEach { Text("• ${it.title} · ${it.status}", color = Brand.Red) } }
+        }
     }
 }
 
@@ -191,7 +202,7 @@ import java.util.UUID
         }
         if (kind == "asset") {
             Options("Tipo de equipo", detail, listOf("Mula", "Grúa", "Montacargas", "Otro")) { detail = it }
-            Options("Estado del equipo", assetState, listOf("Activo", "En taller", "Inactivo")) { assetState = it }
+            Options("Estado del equipo", assetState, listOf("Activo", "En taller", "Inactivo temporal", "Inactivo")) { assetState = it }
         }
         if (kind == "item") {
             OutlinedTextField(detail, { detail = it }, label = { Text("Unidad (opcional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -202,15 +213,5 @@ import java.util.UUID
 }
 
 @Composable fun ReportViewer(doc: DailyDocument, onDismiss: () -> Unit, share: () -> Unit) {
-    SafeFullscreenDialog(onDismissRequest = onDismiss) {
-        BrandHeader()
-        Text("Estatus del ${doc.day}", style = MaterialTheme.typography.titleLarge)
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            DailySummary.lines(doc).forEach { line -> Text(line) }
-        }
-        Row(Modifier.fillMaxWidth().testTag("dialog-actions"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("dialog-cancel")) { Text("Cerrar") }
-            Button(onClick = share, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("dialog-confirm")) { Text("Compartir") }
-        }
-    }
+    VisualReportViewer(ReportQuery(ReportType.GENERAL, doc.day), listOf(doc), onDismiss)
 }

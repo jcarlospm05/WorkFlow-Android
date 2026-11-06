@@ -26,7 +26,7 @@ check('No debug signing in release config', 'signingConfigs.getByName("debug")' 
 workflow = (root/'.github/workflows/android.yml').read_text()
 check('CI checks not ignored', 'continue-on-error' not in workflow and ':core:test' in workflow and ':app:lintDebug' in workflow)
 codec = (root/'core/src/main/kotlin/com/workflow/core/DailyCodec.kt').read_text()
-check('Bounded JSON and version checks present', all(s in codec for s in ['MAX_BYTES', 'depth <= 32', 'schemaVersion == 1', 'ignoreUnknownKeys = false']))
+check('Bounded JSON and version checks present', all(s in codec for s in ['MAX_BYTES', 'depth <= 32', 'schemaVersion in 1..2', 'ignoreUnknownKeys = false']))
 repo = (root/'app/src/main/java/com/workflow/operaciones/data/WorkflowRepository.kt').read_text()
 check('Transactional writes and atomic files present', 'db.withTransaction' in repo and 'AtomicFile' in repo and 'validateStockHistory' in repo)
 check('JSON data saved with revision inside transaction', 'dao.putDocument(DocumentRow' in repo)

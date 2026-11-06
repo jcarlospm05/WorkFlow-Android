@@ -69,7 +69,7 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
 }
 @Composable internal fun WFStatus(value: String) {
     val background = when (value) {
-        "Abierta", "Ausencia injustificada" -> Brand.Red.copy(alpha = .13f)
+        "Abierta", "Ausencia injustificada", "Inactivo temporal", "Inactivo", "En taller" -> Brand.Red.copy(alpha = .13f)
         "Pendiente", "Borrador", "En proceso", "Tardanza", "Bajo mínimo" -> Brand.Amber.copy(alpha = .32f)
         "Completada", "Presente", "Cerrada", "Abastecido" -> Brand.Sage
         else -> Brand.Selected
@@ -77,7 +77,7 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
     Surface(shape = RoundedCornerShape(50), color = background) {
         Row(Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             Icon(if (value in listOf("Completada", "Presente", "Cerrada", "Abastecido")) Icons.Outlined.CheckCircle else Icons.Outlined.Schedule, null, Modifier.size(13.dp))
-            Text(value, style = MaterialTheme.typography.labelMedium, color = Brand.Petroleum)
+            Text(value, style = MaterialTheme.typography.labelMedium, color = if (value in listOf("Inactivo temporal", "Inactivo", "En taller")) Brand.Red else Brand.Petroleum)
         }
     }
 }

@@ -27,7 +27,10 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
     var message by mutableStateOf<String?>(null)
     var actionError by mutableStateOf<String?>(null); private set
     var shareRequest by mutableStateOf<DailyDocument?>(null)
-    var shareAfterSave by mutableStateOf(true)
+    var shareAfterSave by mutableStateOf(repository.shareAfterSave)
+    fun setOfferShare(value: Boolean) { repository.shareAfterSave = value; shareAfterSave = value }
+    var incomingDecision by mutableStateOf<ContinuationDecision?>(null); private set
+    var loadedDayEvent by mutableIntStateOf(0); private set
     var hasTransferKey by mutableStateOf(false); private set
     var needsTransferSetup by mutableStateOf(false); private set
     var transferKeyError by mutableStateOf<String?>(null); private set
@@ -65,6 +68,7 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
     fun refresh() = action { reload() }
     fun clearActionError() { actionError = null }
     fun chooseDay(value: String) = action { Rules.day(value); day = value; reload() }
+    fun startDay(selected: Set<String>, done: () -> Unit) = action { repository.startDay(day, selected); reload(); message = "Jornada iniciada. Tus actividades están en la agenda."; done() }
     fun save(op: Operation, offerShare: Boolean = true, done: () -> Unit) = action {
         repository.save(op); reload(); done()
         message = repository.fileWarning ?: "Registro guardado. Tu informe del día está actualizado."
@@ -82,7 +86,8 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
         hasTransferKey = repository.transferKeys.isConfigured()
         if (password == null) { incomingNeedsKey = true; return@action }
         try {
-            preview = withContext(Dispatchers.IO) { ProtectedReport.decode(bytes, password) }
+            val decoded = withContext(Dispatchers.IO) { ProtectedReport.decode(bytes, password) }
+            incomingDecision = repository.continuationDecision(decoded); preview = decoded
             pendingIncoming?.fill(0); pendingIncoming = null
         } catch (_: IllegalArgumentException) {
             incomingNeedsKey = true
@@ -103,7 +108,7 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
                 decoded
             }
             hasTransferKey = repository.transferKeys.isConfigured()
-            cancelIncoming(); preview = document
+            cancelIncoming(); incomingDecision = repository.continuationDecision(document); preview = document
         } catch (e: Exception) {
             incomingKeyError = if (e is IllegalArgumentException) e.message else "No se pudo abrir el informe. Inténtalo de nuevo."
         } finally { secret.fill('\u0000') }
@@ -142,12 +147,12 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
             else message = "La clave está guardada, pero no se pudo compartir el informe. Inténtalo desde Reportes."
         } finally { secret.fill('\u0000') }
     }
-    fun dismissPreview() { preview = null }
-    fun acceptPreview() = action {
+    fun dismissPreview() { preview = null; incomingDecision = null }
+    fun acceptPreview(replaceConflict: Boolean = false) = action {
         val doc = preview ?: return@action
-        val result = repository.receive(doc)
-        preview = null; reload()
-        message = when (result) { ImportDecision.NEW -> "Informe recibido"; ImportDecision.UPDATE -> "Informe actualizado"; ImportDecision.ALREADY_RECEIVED -> "Este informe ya estaba recibido; no se duplicó" }
+        val result = repository.continueDay(doc, replaceConflict)
+        day = doc.day; preview = null; incomingDecision = null; reload(); loadedDayEvent++
+        message = if (result == ContinuationDecision.ALREADY_LOADED) "Esta versión ya estaba cargada. Puedes continuar la jornada." else "Jornada del ${doc.day} cargada. Puedes continuar la operación."
     }
     override fun onCleared() { pendingIncoming?.fill(0); super.onCleared() }
 }

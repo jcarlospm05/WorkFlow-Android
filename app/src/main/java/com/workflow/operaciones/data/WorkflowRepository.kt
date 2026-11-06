@@ -24,12 +24,15 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
     private val prefs = context.getSharedPreferences("identity", Context.MODE_PRIVATE)
     val origin: String = prefs.getString("origin", null) ?: UUID.randomUUID().toString().also { check(prefs.edit().putString("origin", it).commit()) }
     val supervisor: String get() = prefs.getString("supervisor", "Supervisor").orEmpty()
+    var shareAfterSave: Boolean
+        get() = prefs.getBoolean("offer_share", false)
+        set(value) { check(prefs.edit().putBoolean("offer_share", value).commit()) }
     private val json get() = DailyCodec.json
     suspend fun setSupervisor(name: String, day: String) = withContext(Dispatchers.IO) {
         Rules.text(name, 100)
         mutex.withLock {
             check(prefs.edit().putString("supervisor", name.trim()).commit())
-            val doc = db.withTransaction { regenerate(day) }
+            val doc = db.withTransaction { regenerate(day, supervisorOverride = name.trim()) }
             materialize(doc)
         }
     }
@@ -66,6 +69,10 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
                 val old = dao.masters().firstOrNull { it.id == row.id }
                 require(old == null || old.kind == row.kind)
                 if (old == null) dao.insertMaster(row) else dao.updateMaster(row)
+                if (row.kind == "asset") {
+                    val asset = json.decodeFromString<Asset>(row.payload)
+                    if (asset.state in listOf("En taller", "Inactivo temporal")) ensureWorkshopTask(day)
+                }
                 dao.audit(AuditRow(at = Instant.now().toString(), action = if (old == null) "CREATE_MASTER" else "UPDATE_MASTER", recordId = row.id, before = old?.payload, after = row.payload))
                 regenerate(day)
             }
@@ -92,6 +99,14 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
                 val previous = dao.operation(normalized.id)
                 val payload = json.encodeToString(normalized)
                 dao.putOperation(OperationRow(normalized.id, normalized.day, normalized.module.name, key, payload))
+                val task = LinkedTasks.forOperation(normalized, sameDay, assets.firstOrNull { it.id == normalized.assetId })
+                if (task != null) putAutomaticTask(task)
+                if (normalized.module == Module.FAULT) {
+                    val resolved = if (normalized.status == "Cerrada") normalized.copy(resolvedAt = normalized.resolvedAt.ifBlank { Instant.now().toString() }) else normalized.copy(resolvedAt = "")
+                    dao.putOperation(OperationRow(resolved.id, resolved.day, resolved.module.name, key, json.encodeToString(resolved)))
+                    updateWorkshopAssets()
+                    ensureWorkshopTask(normalized.day, reopen = normalized.status != "Cerrada")
+                }
                 // Stock ledger is global: editing an earlier day must not make any later balance negative.
                 validateStockHistory(items)
                 dao.audit(AuditRow(at = normalized.updatedAt, action = if (previous == null) "CREATE" else "UPDATE", recordId = normalized.id, before = previous?.payload, after = payload))
@@ -101,25 +116,84 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
             docs.forEach(::materialize)
         }
     }
+    private suspend fun putAutomaticTask(task: Operation) {
+        val before = dao.operation(task.id)
+        val payload = json.encodeToString(task)
+        dao.putOperation(OperationRow(task.id, task.day, task.module.name, task.naturalKey(), payload))
+        dao.audit(AuditRow(at = Instant.now().toString(), action = "LINKED_TASK", recordId = task.id, before = before?.payload, after = payload))
+    }
+    private suspend fun ensureWorkshopTask(day: String, reopen: Boolean = false) {
+        val assets = loadMasters().second
+        val inWorkshop = assets.any { it.state in listOf("En taller", "Inactivo temporal") }
+        val previous = dao.operations(day).map { json.decodeFromString<Operation>(it.payload) }.firstOrNull { it.templateKey == "workshop-review" }
+        if (!inWorkshop && previous == null) return
+        val task = previous ?: Operation(day = day, module = Module.TASK, title = "Revisar equipos en taller", status = "Pendiente", templateKey = "workshop-review")
+        putAutomaticTask(task.copy(status = if (!inWorkshop) "Completada" else if (reopen) "Pendiente" else task.status, updatedAt = Instant.now().toString()))
+    }
+    private suspend fun updateWorkshopAssets() {
+        val faults = dao.allOperations().map { json.decodeFromString<Operation>(it.payload) }.filter { it.module == Module.FAULT }
+        loadMasters().second.forEach { asset ->
+            val related = faults.filter { it.assetId == asset.id }
+            val state = when {
+                related.any { it.status != "Cerrada" } -> "Inactivo temporal"
+                related.isNotEmpty() && asset.state in listOf("Inactivo temporal", "En taller") -> "Activo"
+                else -> asset.state
+            }
+            if (state != asset.state) {
+                val payload = json.encodeToString(asset.copy(state = state))
+                dao.updateMaster(MasterRow(asset.id, "asset", asset.code.lowercase(), payload))
+                dao.audit(AuditRow(at = Instant.now().toString(), action = "WORKSHOP_STATE", recordId = asset.id, before = json.encodeToString(asset), after = payload))
+            }
+        }
+    }
+    suspend fun startDay(day: String, selected: Set<String>) = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val doc = db.withTransaction {
+                val previous = dao.document(day)?.let(::decodeDocument)
+                require(previous?.startedAt.isNullOrEmpty()) { "La jornada ya está iniciada" }
+                val existing = dao.operations(day).map { json.decodeFromString<Operation>(it.payload) }
+                DayTemplates.operations(day, selected).filter { task -> existing.none { it.templateKey == task.templateKey } }.forEach { putAutomaticTask(it) }
+                ensureWorkshopTask(day)
+                regenerate(day, startedAt = Instant.now().toString())
+            }
+            materialize(doc)
+        }
+    }
     private suspend fun validateStockHistory(items: List<StockItem>) {
         val stock = dao.allOperations().map { json.decodeFromString<Operation>(it.payload) }.filter { it.module == Module.STOCK }
+        val openings = dao.openings()
         items.forEach { item ->
             var balance = 0.0
-            stock.filter { it.itemId == item.id }.groupBy { it.day }.toSortedMap().forEach { (_, rows) ->
+            val rowsByDay = stock.filter { it.itemId == item.id }.groupBy { it.day }
+            val anchors = openings.filter { it.itemId == item.id }.associate { it.day to it.quantity }
+            (rowsByDay.keys + anchors.keys).sorted().forEach { date ->
+                anchors[date]?.let { balance = it }
+                val rows = rowsByDay[date].orEmpty()
                 balance += rows.sumOf { if (it.status == "Entrada") it.quantity else -it.quantity }
                 require(balance >= -0.000001) { "La salida supera las existencias de ${item.name}" }
             }
         }
     }
-    private suspend fun regenerate(day: String): DailyDocument {
+    private suspend fun balances(day: String, items: List<StockItem>, all: List<Operation>, before: Boolean = false): Map<String, Double> {
+        val anchors = dao.openings().filter { it.day <= day }
+        return items.associate { item ->
+            val anchor = anchors.lastOrNull { it.itemId == item.id }
+            item.id to ((anchor?.quantity ?: 0.0) + all.filter { it.module == Module.STOCK && it.itemId == item.id && (it.day < day || (!before && it.day == day)) && (anchor == null || it.day >= anchor.day) }
+                .sumOf { if (it.status == "Entrada") it.quantity else -it.quantity }).coerceAtLeast(0.0)
+        }
+    }
+    private suspend fun regenerate(day: String, supervisorOverride: String? = null, startedAt: String? = null, imported: DailyDocument? = null): DailyDocument {
         Rules.day(day)
         val (operators, assets, items) = loadMasters()
         val all = dao.allOperations().map { json.decodeFromString<Operation>(it.payload) }
-        val balances = items.associate { item -> item.id to all.filter { it.day <= day && it.module == Module.STOCK && it.itemId == item.id }
-            .sumOf { if (it.status == "Entrada") it.quantity else -it.quantity }.coerceAtLeast(0.0) }
-        val doc = DailyCodec.seal(DailyDocument(originId = origin, supervisor = supervisor, day = day,
-            revision = (dao.document(day)?.revision ?: 0) + 1, operators = operators, assets = assets, items = items,
-            operations = all.filter { it.day == day }, stockBalances = balances))
+        val previous = dao.document(day)?.let(::decodeDocument)
+        val source = imported ?: previous
+        val doc = DailyCodec.seal(DailyDocument(originId = origin, supervisor = supervisorOverride ?: source?.supervisor ?: supervisor, day = day,
+            revision = maxOf(previous?.revision ?: 0, imported?.revision ?: 0) + 1, operators = operators, assets = assets, items = items,
+            operations = all.filter { it.day == day }, stockBalances = balances(day, items, all),
+            journeyId = source?.let(ContinuationPolicy::identity) ?: UUID.randomUUID().toString(),
+            versionVector = if (imported != null) ContinuationPolicy.vector(imported) else ContinuationPolicy.nextVector(previous, origin),
+            startedAt = startedAt ?: source?.startedAt.orEmpty(), stockOpeningBalances = balances(day, items, all, before = true)))
         val bytes = DailyCodec.encode(doc) // Fail/rollback before commit if the package exceeds its limit.
         dao.putDocument(DocumentRow(day, doc.revision, bytes.toString(Charsets.UTF_8)))
         return doc
@@ -166,6 +240,54 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
                 decision
             }
         }
+    }
+    suspend fun continuationDecision(doc: DailyDocument): ContinuationDecision = withContext(Dispatchers.IO) {
+        val local = dao.document(doc.day)?.let(::decodeDocument)
+        if (local == null) ContinuationDecision.LOAD else ContinuationPolicy.decide(local, doc)
+    }
+    /** Complete, transactional handoff. Keep previous content in the audit before any replacement. */
+    suspend fun continueDay(doc: DailyDocument, replaceConflict: Boolean = false): ContinuationDecision = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            DailyCodec.decode(json.encodeToString(doc).toByteArray(Charsets.UTF_8))
+            var decision = ContinuationDecision.LOAD
+            val result = db.withTransaction {
+                val old = dao.document(doc.day)?.let(::decodeDocument)
+                decision = old?.let { ContinuationPolicy.decide(it, doc) } ?: ContinuationDecision.LOAD
+                if (decision == ContinuationDecision.ALREADY_LOADED) return@withTransaction null
+                require(replaceConflict || decision !in listOf(ContinuationDecision.CONFLICT, ContinuationDecision.OLDER)) { "La jornada tiene cambios distintos o más recientes. Revisa ambas versiones antes de sustituirla." }
+                val payload = json.encodeToString(doc)
+                dao.audit(AuditRow(at = Instant.now().toString(), action = "CONTINUE_DAY", recordId = doc.day, before = old?.let { json.encodeToString(it) }, after = payload))
+                doc.operators.forEach { value -> importMaster(MasterRow(value.id, "operator", value.code.lowercase(java.util.Locale.ROOT).ifBlank { "workflow:auto:${value.id}" }, json.encodeToString(value))) }
+                doc.assets.forEach { value -> importMaster(MasterRow(value.id, "asset", value.code.lowercase(), json.encodeToString(value))) }
+                doc.items.forEach { value -> importMaster(MasterRow(value.id, "item", value.name.lowercase(), json.encodeToString(value))) }
+                val otherIds = dao.allOperations().filter { it.day != doc.day }.map { it.id }.toSet()
+                require(doc.operations.none { it.id in otherIds }) { "Un registro recibido pertenece a otra fecha en este teléfono" }
+                dao.clearDay(doc.day)
+                doc.operations.forEach { op -> dao.putOperation(OperationRow(op.id, op.day, op.module.name, op.naturalKey(), json.encodeToString(op))) }
+                doc.items.forEach { item ->
+                    val change = doc.operations.filter { it.module == Module.STOCK && it.itemId == item.id }.sumOf { if (it.status == "Entrada") it.quantity else -it.quantity }
+                    val opening = doc.stockOpeningBalances[item.id] ?: ((doc.stockBalances[item.id] ?: 0.0) - change)
+                    require(opening >= -0.000001 && kotlin.math.abs(opening + change - doc.stockBalances.getValue(item.id)) < 0.00001) { "Las existencias recibidas no coinciden con sus movimientos" }
+                    dao.putOpening(StockOpeningRow(doc.day, item.id, opening.coerceAtLeast(0.0)))
+                }
+                updateWorkshopAssets()
+                validateStockHistory(loadMasters().third)
+                dao.putReceived(ReceivedRow(doc.originId, doc.day, doc.revision, payload, Instant.now().toString()))
+                val current = regenerate(doc.day, imported = doc)
+                // Later days must reflect any imported stock movements as well.
+                dao.documents().filter { it.day > doc.day }.forEach { regenerate(it.day) }
+                current
+            }
+            result?.let(::materialize)
+            decision
+        }
+    }
+    private suspend fun importMaster(row: MasterRow) {
+        val all = dao.masters()
+        require(all.none { it.id != row.id && it.kind == row.kind && it.code == row.code }) { "Un nombre o código recibido ya está asignado a otro registro del catálogo. Revisa ese registro antes de cargar la jornada." }
+        val old = all.firstOrNull { it.id == row.id }
+        require(old == null || old.kind == row.kind) { "Un identificador recibido pertenece a otro catálogo" }
+        if (old == null) dao.insertMaster(row) else dao.updateMaster(row)
     }
     suspend fun received(): List<DailyDocument> = withContext(Dispatchers.IO) { dao.allReceived().map { json.decodeFromString<DailyDocument>(it.payload) } }
     suspend fun history(): List<DailyDocument> = withContext(Dispatchers.IO) { dao.documents().map(::decodeDocument) }
