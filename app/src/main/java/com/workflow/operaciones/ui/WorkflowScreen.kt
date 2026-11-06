@@ -1,6 +1,7 @@
 package com.workflow.operaciones.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
@@ -9,6 +10,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -111,15 +116,17 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::preview) }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(vm.message) { vm.message?.let { snackbar.showSnackbar(it); vm.message = null } }
+    val screenScroll = remember(tab, module, vm.day) { LazyListState() }
+    BackHandler(enabled = tab != 0 || module != null) { if (module != null) module = null else tab = 0 }
     fun newOperation(which: Module) {
         editor = Operation(day = vm.day, module = which, title = which.label, status = Rules.statuses.getValue(which).first())
     }
     Scaffold(
-        modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
+        modifier = Modifier.fillMaxSize().safeDrawingPadding(),
         containerColor = Brand.Background,
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Row(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).fillMaxWidth().padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { BrandHeader() }
                 Surface(Modifier.size(46.dp).clickable { tab = 4; module = null }, shape = CircleShape, color = Brand.Selected) {
                     Box(contentAlignment = Alignment.Center) { Text(vm.document?.supervisor?.split(" ")?.filter { it.isNotBlank() }?.take(2)?.map { it.first().uppercaseChar() }?.joinToString("") ?: "WF", style = MaterialTheme.typography.titleSmall) }
@@ -128,10 +135,17 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
         },
         bottomBar = {
             Surface(shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp), color = Color.White, shadowElevation = 5.dp) {
-                NavigationBar(containerColor = Color.White, tonalElevation = 0.dp) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     val labels = listOf("Hoy", "Agenda", "Operación", "Reportes", "Más")
                     val icons = listOf(Icons.Outlined.Home, Icons.Outlined.CalendarMonth, Icons.Outlined.Engineering, Icons.Outlined.Assessment, Icons.Outlined.MoreHoriz)
-                    labels.forEachIndexed { index, label -> NavigationBarItem(modifier = Modifier.testTag("nav-$index"), selected = tab == index, onClick = { tab = index; module = null }, icon = { Icon(icons[index], null, Modifier.size(25.dp)) }, label = { Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1) }, colors = NavigationBarItemDefaults.colors(indicatorColor = Brand.Selected, selectedIconColor = Brand.Petroleum, selectedTextColor = Brand.Petroleum, unselectedIconColor = Brand.SecondaryText, unselectedTextColor = Brand.SecondaryText)) }
+                    labels.forEachIndexed { index, label ->
+                        Surface(modifier = Modifier.weight(1f).testTag("nav-$index").selectable(selected = tab == index, role = Role.Tab, onClick = { tab = index; module = null }), shape = RoundedCornerShape(18.dp), color = if (tab == index) Brand.Selected else Color.White) {
+                            Column(Modifier.heightIn(min = 64.dp).padding(horizontal = 2.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(icons[index], null, Modifier.size(24.dp), tint = if (tab == index) Brand.Petroleum else Brand.SecondaryText)
+                                Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, color = if (tab == index) Brand.Petroleum else Brand.SecondaryText)
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -141,7 +155,8 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
         if (doc == null) {
             Column(Modifier.padding(insets).padding(20.dp)) { if (vm.busy) CircularProgressIndicator() else Button(onClick = vm::refresh) { Text("Volver a cargar") } }
         } else LazyColumn(
-            Modifier.padding(insets).consumeWindowInsets(insets).fillMaxSize(),
+            Modifier.padding(insets).fillMaxSize().clipToBounds(),
+            state = screenScroll,
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (vm.busy) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }

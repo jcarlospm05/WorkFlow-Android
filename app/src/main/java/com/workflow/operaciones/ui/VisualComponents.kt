@@ -42,7 +42,7 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
 @Composable internal fun WFHeading(title: String, day: String, chooseDate: () -> Unit) {
     Column(Modifier.clickable(onClick = chooseDate).heightIn(min = 56.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
-        Row(Modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(friendlyDay(day), style = MaterialTheme.typography.bodyLarge, color = Brand.SecondaryText, modifier = Modifier.weight(1f, fill = false))
             Icon(Icons.Outlined.ExpandMore, "Cambiar fecha", Modifier.size(18.dp), tint = Brand.SecondaryText)
         }
@@ -54,12 +54,12 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
     }
 }
 @Composable internal fun MetricTile(value: String, label: String, icon: ImageVector, color: Color, modifier: Modifier = Modifier) {
-    WFCard(modifier.heightIn(min = 84.dp), color) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            WFIcon(icon, Color.White.copy(alpha = .42f), 36)
+    Surface(modifier = modifier.heightIn(min = 84.dp), shape = RoundedCornerShape(20.dp), color = color, border = BorderStroke(.5.dp, Brand.Border.copy(alpha = .65f)), shadowElevation = 2.dp) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            WFIcon(icon, Color.White.copy(alpha = .42f), 32)
             Column(Modifier.weight(1f)) {
                 Text(value, style = MaterialTheme.typography.headlineMedium)
-                Text(label, style = MaterialTheme.typography.bodyMedium)
+                Text(label, style = MaterialTheme.typography.labelMedium)
             }
         }
     }

@@ -36,5 +36,5 @@ object Brand {
             bodyLarge = body, bodyMedium = body.copy(fontSize = 14.sp, lineHeight = 20.sp), bodySmall = body.copy(fontSize = 12.sp, lineHeight = 17.sp),
             labelLarge = body.copy(fontWeight = FontWeight.SemiBold), labelMedium = body.copy(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
             labelSmall = body.copy(fontSize = 11.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium)),
-        shapes = Shapes(small = RoundedCornerShape(10.dp), medium = RoundedCornerShape(14.dp), large = RoundedCornerShape(20.dp), extraLarge = RoundedCornerShape(26.dp)), content = content)
+        shapes = Shapes(extraSmall = RoundedCornerShape(14.dp), small = RoundedCornerShape(10.dp), medium = RoundedCornerShape(14.dp), large = RoundedCornerShape(20.dp), extraLarge = RoundedCornerShape(26.dp)), content = content)
 }
