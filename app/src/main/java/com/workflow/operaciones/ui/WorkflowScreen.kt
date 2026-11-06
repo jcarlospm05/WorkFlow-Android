@@ -268,7 +268,15 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                                 items(doc.items, key = { it.id }) { item -> WFCard(Modifier.fillMaxWidth()) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { WFIcon(Icons.Outlined.Inventory2, Brand.Sand); Column(Modifier.weight(1f)) { Text(item.name, style = MaterialTheme.typography.titleMedium); Text("${doc.stockBalances[item.id] ?: 0.0} ${item.unit}", style = MaterialTheme.typography.titleSmall); Text("Mínimo: ${item.minimum}", style = MaterialTheme.typography.bodySmall, color = Brand.SecondaryText) } }
                                     if ((doc.stockBalances[item.id] ?: 0.0) < item.minimum) WFStatus("Bajo mínimo")
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { listOf("Entrada", "Salida").forEach { status -> OutlinedButton(onClick = { editor = Operation(day = doc.day, module = Module.STOCK, title = "$status · ${item.name}", status = status, itemId = item.id) }, modifier = Modifier.weight(1f)) { Icon(if (status == "Entrada") Icons.Outlined.South else Icons.Outlined.North, null, Modifier.size(18.dp)); Spacer(Modifier.width(5.dp)); Text(status) } }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        listOf("Entrada", "Salida").forEach { status ->
+                                            OutlinedButton(onClick = { editor = Operation(day = doc.day, module = Module.STOCK, title = "$status · ${item.name}", status = status, itemId = item.id) }, modifier = Modifier.weight(1f)) {
+                                                Icon(if (status == "Entrada") Icons.Outlined.South else Icons.Outlined.North, null, Modifier.size(18.dp))
+                                                Spacer(Modifier.width(5.dp))
+                                                Text(status)
+                                            }
+                                        }
+                                    }
                                 } }
                                 item { Text("Movimientos del día", style = MaterialTheme.typography.titleMedium) }
                                 items(doc.operations.filter { it.module == Module.STOCK }, key = { it.id }) { op -> OperationCard(op, doc) { editor = op } }

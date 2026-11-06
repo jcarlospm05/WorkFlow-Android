@@ -40,9 +40,9 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
     }
 }
 @Composable internal fun WFHeading(title: String, day: String, chooseDate: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Column(Modifier.clickable(onClick = chooseDate).heightIn(min = 56.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
-        Row(Modifier.clickable(onClick = chooseDate).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(friendlyDay(day), style = MaterialTheme.typography.bodyLarge, color = Brand.SecondaryText, modifier = Modifier.weight(1f, fill = false))
             Icon(Icons.Outlined.ExpandMore, "Cambiar fecha", Modifier.size(18.dp), tint = Brand.SecondaryText)
         }
@@ -54,7 +54,7 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
     }
 }
 @Composable internal fun MetricTile(value: String, label: String, icon: ImageVector, color: Color, modifier: Modifier = Modifier) {
-    WFCard(modifier.heightIn(min = 102.dp), color) {
+    WFCard(modifier.heightIn(min = 84.dp), color) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             WFIcon(icon, Color.White.copy(alpha = .42f), 36)
             Column(Modifier.weight(1f)) {
@@ -91,7 +91,7 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
     }
 }
 @Composable internal fun QuickAction(icon: ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(modifier = modifier.heightIn(min = 82.dp).clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), color = Color.White, shadowElevation = 2.dp, border = BorderStroke(.5.dp, Brand.Border)) {
+    Surface(modifier = modifier.heightIn(min = 76.dp).clickable(onClick = onClick), shape = RoundedCornerShape(18.dp), color = Color.White, shadowElevation = 2.dp, border = BorderStroke(.5.dp, Brand.Border)) {
         Column(Modifier.padding(horizontal = 4.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(icon, null, Modifier.size(26.dp), tint = Brand.Petroleum)
             Text(label, style = MaterialTheme.typography.labelSmall)
