@@ -7,24 +7,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.workflow.core.*
 import com.workflow.core.Module
 import java.util.UUID
 
 @Composable private fun EditorFrame(title: String, busy: Boolean, close: () -> Unit, save: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    Dialog(onDismissRequest = { if (!busy) close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = Brand.Background) {
-            Column(Modifier.safeDrawingPadding().imePadding().padding(20.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge)
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = close, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Cancelar") }
-                    Button(onClick = save, enabled = !busy, modifier = Modifier.weight(1f)) { Text(if (busy) "Guardando…" else "Guardar") }
-                }
-            }
+    SafeFullscreenDialog(onDismissRequest = { if (!busy) close() }) {
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+        Row(Modifier.fillMaxWidth().testTag("dialog-actions"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = close, enabled = !busy, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("dialog-cancel")) { Text("Cancelar") }
+            Button(onClick = save, enabled = !busy, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("dialog-confirm")) { Text(if (busy) "Guardando…" else "Guardar") }
         }
     }
 }
@@ -99,7 +94,7 @@ import java.util.UUID
             }
         }
         OutlinedTextField(time, { time = it }, label = { Text("Hora aproximada HH:mm (opcional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(notes, { notes = it }, label = { Text(if (kind == Module.CLOSE) "Pendientes y excepciones del cierre" else "Detalles / seguimiento / resolución") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(notes, { notes = it }, label = { Text(if (kind == Module.CLOSE) "Pendientes y excepciones del cierre" else "Detalles / seguimiento / resolución") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("operation-notes"))
         if (kind == Module.TICKET) Text("Responsable: ${vm.document?.supervisor}. El ticket no acredita por sí solo una sanción oficial.")
         if (kind == Module.CLOSE) Text("${vm.document?.let { DailySummary.pending(it).size } ?: 0} pendientes. Cerrar no los elimina. Reabre la jornada para corregir registros.")
     }
@@ -145,19 +140,15 @@ import java.util.UUID
 }
 
 @Composable fun ReportViewer(doc: DailyDocument, onDismiss: () -> Unit, share: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = Brand.Background) {
-            Column(Modifier.safeDrawingPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                BrandHeader()
-                Text("Estatus del ${doc.day}", style = MaterialTheme.typography.titleLarge)
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DailySummary.lines(doc).forEach { line -> Text(line) }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cerrar") }
-                    Button(onClick = share, modifier = Modifier.weight(1f)) { Text("Compartir") }
-                }
-            }
+    SafeFullscreenDialog(onDismissRequest = onDismiss) {
+        BrandHeader()
+        Text("Estatus del ${doc.day}", style = MaterialTheme.typography.titleLarge)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            DailySummary.lines(doc).forEach { line -> Text(line) }
+        }
+        Row(Modifier.fillMaxWidth().testTag("dialog-actions"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("dialog-cancel")) { Text("Cerrar") }
+            Button(onClick = share, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("dialog-confirm")) { Text("Compartir") }
         }
     }
 }

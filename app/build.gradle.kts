@@ -34,8 +34,8 @@ android {
         applicationId = "com.workflow.operaciones"
         minSdk = 26
         targetSdk = 35
-        versionCode = 101
-        versionName = "1.0.1-visual"
+        versionCode = 102
+        versionName = "1.0.2-controls"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
@@ -47,7 +47,7 @@ android {
         }
     }
     buildTypes {
-        debug { applicationIdSuffix = ".visual"; versionNameSuffix = "-debug" }
+        debug { applicationIdSuffix = ".review"; versionNameSuffix = "-debug" }
         release {
             isMinifyEnabled = true
             signingConfig = signingConfigs.getByName("production")

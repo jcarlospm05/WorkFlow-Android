@@ -39,3 +39,12 @@ jobs:
           name: WorkFlow-development-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Herramienta pública de firma para la copia local
+        run: |
+          mkdir -p signing-tool
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" signing-tool/
+          cp "$ANDROID_HOME/build-tools/35.0.0/NOTICE.txt" signing-tool/ || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WorkFlow-apksigner-tool
+          path: signing-tool/

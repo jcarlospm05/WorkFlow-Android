@@ -358,15 +358,15 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
             }
         }
     }
-    if (mealPreview) AlertDialog(onDismissRequest = { mealPreview = false }, title = { Text("$mealType · ${mealSelected.size} personas") }, text = { LazyColumn { items(vm.operators.filter { it.id in mealSelected }) { Text("${it.code} · ${it.name}", Modifier.padding(vertical = 6.dp)) } } }, confirmButton = { TextButton(onClick = { mealPreview = false }) { Text("Cerrar") } })
+    if (mealPreview) SafeAlertDialog(scrollText = false, onDismissRequest = { mealPreview = false }, title = { Text("$mealType · ${mealSelected.size} personas") }, text = { LazyColumn { items(vm.operators.filter { it.id in mealSelected }) { Text("${it.code} · ${it.name}", Modifier.padding(vertical = 6.dp)) } } }, confirmButton = { TextButton(onClick = { mealPreview = false }) { Text("Cerrar") } })
     if (dateDialog) {
         var date by remember { mutableStateOf(vm.day) }
-        AlertDialog(onDismissRequest = { dateDialog = false }, title = { Text("Fecha de trabajo") }, text = { OutlinedTextField(date, { date = it }, label = { Text("AAAA-MM-DD") }) }, confirmButton = { TextButton(onClick = { vm.chooseDay(date); dateDialog = false }) { Text("Ver fecha") } }, dismissButton = { TextButton(onClick = { dateDialog = false }) { Text("Cancelar") } })
+        SafeAlertDialog(onDismissRequest = { dateDialog = false }, title = { Text("Fecha de trabajo") }, text = { OutlinedTextField(date, { date = it }, label = { Text("AAAA-MM-DD") }) }, confirmButton = { TextButton(onClick = { vm.chooseDay(date); dateDialog = false }) { Text("Ver fecha") } }, dismissButton = { TextButton(onClick = { dateDialog = false }) { Text("Cancelar") } })
     }
     editor?.let { op -> OperationEditor(op, vm, onDismiss = { editor = null }) }
     master?.let { kind -> MasterEditor(kind, vm, onDismiss = { master = null; editOperator = null; editAsset = null; editItem = null }, operator = editOperator, asset = editAsset, item = editItem) }
     vm.preview?.let { incoming ->
-        AlertDialog(onDismissRequest = vm::dismissPreview, title = { Text("Revisar informe recibido") }, text = {
+        SafeAlertDialog(onDismissRequest = vm::dismissPreview, title = { Text("Revisar informe recibido") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("${incoming.supervisor}\n${incoming.day} · Revisión ${incoming.revision}\n${incoming.operations.size} registros\nOrigen: ${incoming.originId}")
                 Text("Archivo íntegro, remitente no autenticado. Confirma con quién te lo envió. No reemplaza tus datos; actualiza solo este origen y fecha.")
@@ -377,7 +377,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
         ReportViewer(report, onDismiss = { viewing = null }, share = { vm.shareRequest = report })
     }
     vm.shareRequest?.let { report ->
-        AlertDialog(onDismissRequest = { vm.shareRequest = null }, title = { Text("Compartir informe") }, text = {
+        SafeAlertDialog(onDismissRequest = { vm.shareRequest = null }, title = { Text("Compartir informe") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("${report.day} · Revisión ${report.revision}. Contiene datos personales; revisa el destinatario.")
                 listOf("JSON por WhatsApp" to true, "PDF por WhatsApp" to false, "JSON por otra app" to true, "PDF por otra app" to false).forEachIndexed { index, (label, isJson) ->

@@ -9,3 +9,7 @@ key.properties
 
 # Generated losslessly from licensed app/font-source resources.
 app/src/main/res/font/*.ttf
+*.p12
+*.pfx
+review-password*
+.workflow-signing/
