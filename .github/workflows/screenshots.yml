@@ -39,12 +39,12 @@ jobs:
           heap-size: 512M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash -c 'gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.workflow.operaciones.ui.RealScreenshotsTest --stacktrace; result=$?; mkdir -p captured; adb pull /sdcard/Android/data/com.workflow.operaciones.visual/files/screenshots captured/; exit "$result"'
+          script: bash -c 'gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.workflow.operaciones.ui.RealScreenshotsTest --stacktrace; result=$?; mkdir -p captured; adb pull /sdcard/Pictures/WorkFlowScreenshots captured/; exit "$result"'
       - name: Recoger capturas incluso si falla una pantalla
         if: always()
         run: |
           mkdir -p captured
-          adb pull /sdcard/Android/data/com.workflow.operaciones.visual/files/screenshots captured/ || true
+          adb pull /sdcard/Pictures/WorkFlowScreenshots captured/ || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

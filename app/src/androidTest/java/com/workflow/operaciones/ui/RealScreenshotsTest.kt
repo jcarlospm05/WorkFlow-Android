@@ -1,5 +1,9 @@
 package com.workflow.operaciones.ui
 
+import android.content.ContentValues
+import android.provider.MediaStore
+import androidx.annotation.RequiresApi
+import androidx.test.filters.SdkSuppress
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.WindowManager
@@ -30,6 +34,8 @@ import java.util.UUID
  * so the screenshot API can capture pixels. Neither change is in the shipped APK.
  */
 @RunWith(AndroidJUnit4::class)
+@SdkSuppress(minSdkVersion = 29)
+@RequiresApi(29)
 class RealScreenshotsTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
@@ -77,7 +83,7 @@ class RealScreenshotsTest {
             val bitmap = Bitmap.createBitmap(1024, 1024, Bitmap.Config.ARGB_8888)
             logo.setBounds(0, 0, 1024, 1024)
             logo.draw(Canvas(bitmap))
-            File(output, "logo-original.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            saveImage("logo-original", bitmap)
             bitmap.recycle()
         }
         capture("01-hoy")
@@ -103,11 +109,23 @@ class RealScreenshotsTest {
         compose.onNodeWithTag("module-${entry.name}").performScrollTo().performClick()
         compose.waitForIdle()
     }
+    private fun saveImage(name: String, bitmap: Bitmap) {
+        File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // Shared media survives AGP's automatic uninstall of the app after instrumentation.
+        // This code is test-only; no media/storage permission is added to the app.
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "$name.png")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/WorkFlowScreenshots")
+        }
+        val uri = requireNotNull(context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values))
+        requireNotNull(context.contentResolver.openOutputStream(uri)).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
     private fun capture(name: String) {
         compose.waitForIdle()
         Thread.sleep(400)
         val bitmap = requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
-        File(output, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        saveImage(name, bitmap)
         bitmap.recycle()
     }
 }
