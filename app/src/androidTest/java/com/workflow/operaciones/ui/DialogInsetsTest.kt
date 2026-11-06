@@ -3,6 +3,7 @@ package com.workflow.operaciones.ui
 import android.content.ContentValues
 import android.graphics.Bitmap
 import android.provider.MediaStore
+import android.view.View
 import android.view.WindowManager
 import android.view.inspector.WindowInspector
 import android.view.inputmethod.InputMethodManager
@@ -38,6 +39,7 @@ class DialogInsetsTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     private val modes = listOf("gestural", "threebutton")
+    private var activityDecor: View? = null
     private fun shell(command: String) {
         instrumentation.uiAutomation.executeShellCommand(command).use { descriptor ->
             FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
@@ -52,15 +54,24 @@ class DialogInsetsTest {
         compose.activityRule.scenario.onActivity { activity ->
             // Test harness only. The distributed app retains its screen protection and lock.
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            activityDecor = activity.window.decorView
             activity.setContent { WorkflowTheme(content) }
         }
         compose.waitForIdle()
     }
-    private fun dialogDecor() = WindowInspector.getGlobalWindowViews().last { it.isShown && it.hasWindowFocus() }
+    private fun focusedDialogDecor() = WindowInspector.getGlobalWindowViews().lastOrNull {
+        it !== activityDecor && it.isShown && it.hasWindowFocus()
+    }
+    private fun awaitDialogFocus() {
+        // Compose can become idle before Android 15 delivers window focus to a new dialog.
+        compose.waitUntil(15_000) { compose.runOnIdle { focusedDialogDecor() != null } }
+    }
+    private fun dialogDecor() = requireNotNull(focusedDialogDecor()) { "Dialog has not received window focus" }
     private fun imeBottom(): Int = compose.runOnIdle {
         ViewCompat.getRootWindowInsets(dialogDecor())?.getInsets(WindowInsetsCompat.Type.ime())?.bottom ?: 0
     }
     private fun openKeyboard(tag: String) {
+        awaitDialogFocus()
         compose.onNodeWithTag(tag).performScrollTo().performClick().performTextInput("Prueba de teclado")
         compose.runOnIdle {
             val focused = requireNotNull(dialogDecor().findFocus())
@@ -69,6 +80,7 @@ class DialogInsetsTest {
         compose.waitUntil(10_000) { imeBottom() > 0 }
     }
     private fun assertSafeActions(vararg tags: String) {
+        awaitDialogFocus()
         compose.waitForIdle()
         val window = compose.runOnIdle {
             val decor = dialogDecor()
