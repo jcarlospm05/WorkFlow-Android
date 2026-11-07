@@ -48,8 +48,12 @@ class AgendaScheduler(private val context: Context, private val documents: suspe
             val plan=AgendaAlarms.plan(documents(),Instant.now(),ZoneId.systemDefault()).associateBy { it.key }
             val delivered=state.getStringSet("delivered",emptySet()).orEmpty().intersect(plan.keys)
             val old=state.getStringSet("scheduled",emptySet()).orEmpty().toSet()
-            val desired=if(access.exactAllowed()&&access.notificationsAllowed())plan.filterKeys { it !in delivered } else emptyMap()
-            (old-desired.keys).forEach { manager.cancel(broadcast(it)) }
+            val eligible=plan.values.filter { it.key !in delivered }
+            // Keep below Android's per-UID alarm quota, rearming the next tasks after each event.
+            val desired=if(access.exactAllowed()&&access.notificationsAllowed())
+                (eligible.filter{it.taskId==null}+eligible.filter{it.taskId!=null}.sortedBy{it.at}.take(126)).associateBy{it.key}
+                else emptyMap()
+            (old-desired.keys).forEach { val alarm=broadcast(it);manager.cancel(alarm);alarm.cancel() }
             desired.values.forEach { alarm ->
                 val at=maxOf(alarm.at.toEpochMilli(),System.currentTimeMillis()+2000)
                 val show=PendingIntent.getActivity(context,0,agendaIntent(context,alarm.day).setData(Uri.parse("workflow-agenda://day/${alarm.day}")),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)

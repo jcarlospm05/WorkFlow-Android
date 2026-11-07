@@ -30,7 +30,8 @@ class AgendaAlarmService : Service() {
             STOP -> stopAlarm()
             RECHECK -> if(running)scope.launch {
                 val docs=withContext(Dispatchers.IO){(application as WorkflowApp).repository.history()}
-                if(AgendaAlarms.plan(docs,Instant.now(),ZoneId.systemDefault()).none{it.key==activeKey})stopAlarm()
+                val channel=getSystemService(NotificationManager::class.java).getNotificationChannel(AgendaScheduler.CHANNEL)
+                if(!AndroidAgendaAccess(this@AgendaAlarmService).notificationsAllowed() || channel==null || channel.importance==NotificationManager.IMPORTANCE_NONE || AgendaAlarms.plan(docs,Instant.now(),ZoneId.systemDefault()).none{it.key==activeKey})stopAlarm()
             } else stopSelf()
             RING -> {
                 val day=intent.getStringExtra("day") ?: return START_NOT_STICKY

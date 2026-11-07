@@ -14,8 +14,8 @@ import com.workflow.operaciones.data.WorkflowRepository
 import com.workflow.operaciones.reminders.AgendaScheduler
 
 class WorkflowApp : Application() {
-    val agendaScheduler by lazy { AgendaScheduler(this) { repository.history() } }
-    val repository by lazy { WorkflowRepository(this, WorkflowDatabase.open(this)).also { it.onChanged = { agendaScheduler.requestReconcile() } } }
+    val agendaScheduler: AgendaScheduler by lazy { AgendaScheduler(this) { repository.history() } }
+    val repository: WorkflowRepository by lazy { WorkflowRepository(this, WorkflowDatabase.open(this)).also { it.onChanged = { agendaScheduler.requestReconcile() } } }
     override fun onCreate() {
         super.onCreate()
         AgendaScheduler.createChannel(this)

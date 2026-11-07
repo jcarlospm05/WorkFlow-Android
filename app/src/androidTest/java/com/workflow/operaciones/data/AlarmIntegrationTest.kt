@@ -46,7 +46,7 @@ class AlarmIntegrationTest {
     }
     @After fun finish()=runBlocking {
         clearPending();app.agendaScheduler.reconcile()
-        context.startService(Intent(context,AgendaAlarmService::class.java).setAction(AgendaAlarmService.STOP))
+        context.stopService(Intent(context,AgendaAlarmService::class.java))
     }
     @Test fun exact_alarm_is_registered_and_cancelled_when_task_is_completed()=runBlocking {
         val due=ZonedDateTime.now().plusDays(1).withHour(23).withMinute(50)
