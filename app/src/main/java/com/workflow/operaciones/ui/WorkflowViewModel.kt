@@ -69,8 +69,8 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
     fun clearActionError() { actionError = null }
     fun chooseDay(value: String) = action { Rules.day(value); day = value; reload() }
     fun startDay(selected: Set<String>, done: () -> Unit) = action { repository.startDay(day, selected); reload(); message = "Jornada iniciada. Tus actividades están en la agenda."; done() }
-    fun save(op: Operation, offerShare: Boolean = true, done: () -> Unit) = action {
-        repository.save(op); reload(); done()
+    fun save(op: Operation, offerShare: Boolean = true, expectedUpdatedAt: String? = null, done: () -> Unit) = action {
+        repository.save(op, expectedUpdatedAt); reload(); done()
         message = repository.fileWarning ?: "Registro guardado. Tu informe del día está actualizado."
         if (shareAfterSave && offerShare) shareRequest = document
     }

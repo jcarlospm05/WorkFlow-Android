@@ -79,13 +79,16 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
             materialize(doc)
         }
     }
-    suspend fun save(value: Operation) = withContext(Dispatchers.IO) {
+    suspend fun save(value: Operation, expectedUpdatedAt: String? = null) = withContext(Dispatchers.IO) {
         mutex.withLock {
             val docs = db.withTransaction {
                 val (ops, assets, items) = loadMasters()
                 val checked = if (value.module == Module.FAULT) value.copy(resolvedAt = if (value.status == "Cerrada") value.resolvedAt.ifBlank { Instant.now().toString() } else "") else value
                 Rules.operation(checked, ops, assets, items)
                 val old = dao.operation(value.id)
+                if (expectedUpdatedAt != null) require(old != null && json.decodeFromString<Operation>(old.payload).updatedAt == expectedUpdatedAt) {
+                    "Este registro se actualizó mientras estaba abierto. Cierra el formulario y abre su versión actual para revisar los cambios."
+                }
                 require(old == null || old.day == value.day) { "No se puede mover un registro a otra fecha" }
                 val sameDay = dao.operations(value.day).map { json.decodeFromString<Operation>(it.payload) }
                 val closed = sameDay.any { it.module == Module.CLOSE && it.status == "Cerrada" }

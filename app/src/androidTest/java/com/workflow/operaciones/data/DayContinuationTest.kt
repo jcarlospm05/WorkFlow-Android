@@ -135,4 +135,15 @@ class DayContinuationTest {
         assertFalse(a.document(day).operations.any{it.module==Module.CLOSE})
     }
 
+
+    @Test fun stale_form_cannot_overwrite_a_record_updated_by_a_continued_journey()=runBlocking {
+        val original=Operation(day=day,module=Module.TASK,title="Primera versión",status="Pendiente")
+        a.save(original)
+        val before=a.document(day).operations.single()
+        a.save(before.copy(title="Versión recibida actualizada"))
+        val latest=a.document(day)
+        try { a.save(before.copy(title="Borrador anterior"),expectedUpdatedAt=before.updatedAt);fail("Debe conservar la versión actual") }
+        catch(_:IllegalArgumentException){}
+        assertEquals(latest,a.document(day))
+    }
 }

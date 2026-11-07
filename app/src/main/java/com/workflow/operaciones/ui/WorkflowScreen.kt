@@ -184,10 +184,10 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                 CompositionLocalProvider(LocalInlineEditor provides true) {
                     if (master != null) {
                         formState.SaveableStateProvider("master:$masterDraftKey") {
-                            MasterEditor(master!!, vm, onDismiss = { master = null; editOperator = null; editAsset = null; editItem = null; formVisible = editor != null }, operator = editOperator, asset = editAsset, item = editItem)
+                            MasterEditor(master!!, vm, onDismiss = { formState.removeState("master:$masterDraftKey"); master = null; editOperator = null; editAsset = null; editItem = null; formVisible = editor != null }, operator = editOperator, asset = editAsset, item = editItem)
                         }
-                    } else editor?.let { op -> formState.SaveableStateProvider("operation:${op.id}") {
-                        OperationEditor(op, vm, addMaster = ::newMaster, onDismiss = { editor = null; formVisible = false })
+                    } else editor?.let { op -> formState.SaveableStateProvider("operation:${op.id}:${op.updatedAt}") {
+                        OperationEditor(op, vm, addMaster = ::newMaster, onDismiss = { formState.removeState("operation:${op.id}:${op.updatedAt}"); editor = null; formVisible = false })
                     } }
                 }
             }

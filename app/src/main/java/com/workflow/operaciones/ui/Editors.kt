@@ -80,7 +80,8 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
             val operation = original.copy(id = draftId, title = title.trim(), status = status, operatorId = opId.ifEmpty { null }, assetId = assetId.ifEmpty { null }, itemId = itemId.ifEmpty { null }, operatorIds = selected.toList().sorted(), shift = shift, mealType = mealType, extended = ext, quantity = number, time = time.trim(), notes = notes.trim(), resolvedAt = if (kind == Module.FAULT && status != "Cerrada") "" else original.resolvedAt, severity = severity, expected = expected.trim(), actual = actual.trim(), recordedBy = original.recordedBy.ifBlank { vm.document?.supervisor.orEmpty() })
             Rules.operation(operation, vm.operators, vm.assets, vm.items)
             if (kind == Module.CLOSE && status == "Cerrada" && DailySummary.pending(vm.document!!).isNotEmpty()) require(notes.isNotBlank()) { "Explica los pendientes del cierre del día" }
-            vm.save(operation, offerShare = !another) {
+            if (isNew) require(vm.document?.operations?.none { it.id == draftId } != false) { "Este registro ya está guardado. Cierra el formulario y pulsa Añadir para crear otro." }
+            vm.save(operation, offerShare = !another, expectedUpdatedAt = if (isNew) null else original.updatedAt) {
                 if (another) {
                     draftId = UUID.randomUUID().toString()
                     title = if (kind == Module.TASK) "" else kind.label
@@ -162,6 +163,16 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
     fun persist(another: Boolean) {
         try {
             error = null
+            if (isNew) {
+                require(vm.operators.none { it.id == draftId } && vm.assets.none { it.id == draftId } && vm.items.none { it.id == draftId }) { "Este registro ya está guardado. Cierra el formulario y pulsa Añadir para crear otro." }
+            } else {
+                val unchanged = when (kind) {
+                    "operator" -> vm.operators.firstOrNull { it.id == draftId } == operator
+                    "asset" -> vm.assets.firstOrNull { it.id == draftId } == asset
+                    else -> vm.items.firstOrNull { it.id == draftId } == item
+                }
+                require(unchanged) { "Este registro cambió desde que abriste el formulario. Ciérralo y abre su versión actual." }
+            }
             val done: () -> Unit = {
                 if (another) {
                     draftId = UUID.randomUUID().toString()

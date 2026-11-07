@@ -209,4 +209,20 @@ class UserExperienceTest {
         compose.waitUntil(30_000){!model.busy&&model.operators.size==1}
         assertEquals("Borrador entre módulos",model.operators.single().name)
     }
+
+    @Test fun an_open_editor_keeps_newer_received_record_data_intact() {
+        prepare()
+        compose.runOnIdle { model.save(Operation(day=model.day,module=Module.TASK,title="Primera versión",status="Pendiente"),offerShare=false){} }
+        compose.waitUntil(30_000){!model.busy&&model.document!!.operations.isNotEmpty()}
+        val original=model.document!!.operations.single()
+        val open=mutableStateOf(true)
+        show { if(open.value)OperationEditor(original,model){open.value=false} }
+        field("operation-title","Mi borrador anterior")
+        compose.runOnIdle { model.save(original.copy(title="Versión recibida"),offerShare=false){} }
+        compose.waitUntil(30_000){!model.busy&&model.document!!.operations.single().title=="Versión recibida"}
+        tap("dialog-confirm")
+        compose.waitUntil(30_000){!model.busy&&model.actionError!=null}
+        assertTrue(open.value)
+        assertEquals("Versión recibida",model.document!!.operations.single().title)
+    }
 }
