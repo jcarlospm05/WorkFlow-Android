@@ -21,12 +21,15 @@ class AndroidAgendaAccess(private val context: Context) : AgendaAccess {
     fun notificationsAllowed(): Boolean = NotificationManagerCompat.from(context).areNotificationsEnabled() &&
         (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
     fun exactAllowed(): Boolean = Build.VERSION.SDK_INT < 31 || context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+    fun channelAllowed(): Boolean {
+        val channel = context.getSystemService(NotificationManager::class.java).getNotificationChannel(AgendaScheduler.CHANNEL)
+        return channel != null && channel.importance >= NotificationManager.IMPORTANCE_DEFAULT && channel.sound != null && channel.shouldVibrate()
+    }
     fun issues(): List<String> = buildList {
         if (!AgendaTime.valid(defaultTime())) add("Guarda una hora para las tareas automáticas.")
         if (!notificationsAllowed()) add("Activa las notificaciones de WorkFlow.")
         if (!exactAllowed()) add("Autoriza las alarmas y recordatorios de WorkFlow.")
-        val channel = context.getSystemService(NotificationManager::class.java).getNotificationChannel(AgendaScheduler.CHANNEL)
-        if (channel == null || channel.importance < NotificationManager.IMPORTANCE_DEFAULT || channel.sound == null || !channel.shouldVibrate()) add("Activa sonido y vibración en el canal Agenda y cierre del día.")
+        if (!channelAllowed()) add("Activa sonido y vibración en el canal Agenda y cierre del día.")
         if (context.getSystemService(AudioManager::class.java).getStreamVolume(AudioManager.STREAM_ALARM) == 0) add("Sube el volumen de las alarmas del teléfono.")
     }
     override fun requireReady() { val issues = issues(); require(issues.isEmpty()) { issues.joinToString("\n") } }

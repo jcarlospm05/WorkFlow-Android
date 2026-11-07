@@ -44,7 +44,7 @@ class AlarmIntegrationTest {
         if(Build.VERSION.SDK_INT>=33)shell("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
         shell("cmd media_session volume --stream 4 --set 5")
     }
-    @After fun finish()=runBlocking {
+    @After fun finish(): Unit=runBlocking {
         clearPending();app.agendaScheduler.reconcile()
         context.stopService(Intent(context,AgendaAlarmService::class.java))
     }
