@@ -44,7 +44,16 @@ class VisualReportsTest {
             assertTrue(bitmap.width>=1190);assertTrue(bitmap.height>=1440)
             var logoPixels=0
             for(x in 60 until 144)for(y in 62 until 146){val pixel=bitmap.getPixel(x,y);if(kotlin.math.abs(android.graphics.Color.green(pixel)-143)<8&&kotlin.math.abs(android.graphics.Color.red(pixel)-22)<8)logoPixels++}
-            assertTrue("Logo original ausente en $type",logoPixels>100);bitmap.recycle()
+            assertTrue("Logo original ausente en $type",logoPixels>100)
+            if(type==ReportType.ASSETS) {
+                var redArcPixels=0
+                for(x in 108 until 278)for(y in 620 until 802) {
+                    val c=bitmap.getPixel(x,y)
+                    if(kotlin.math.abs(android.graphics.Color.red(c)-196)<14 && kotlin.math.abs(android.graphics.Color.green(c)-71)<14 && kotlin.math.abs(android.graphics.Color.blue(c)-71)<14)redArcPixels++
+                }
+                assertTrue("El gráfico de equipos inactivos debe usar el rojo de WorkFlow",redArcPixels>50)
+            }
+            bitmap.recycle()
             val values=ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME,"reporte-real-${type.ordinal+1}-${type.name}.jpg")
                 put(MediaStore.Images.Media.MIME_TYPE,"image/jpeg")

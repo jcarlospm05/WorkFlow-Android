@@ -245,7 +245,7 @@ object ReportBuilder {
                 val selected = rows.filter { it.module == module }
                 metrics += listOf(ReportMetric("${selected.size}", "Registros"), ReportMetric("${selected.map { it.operatorId }.distinct().size}", "Personas únicas", "sage"))
                 sections += recordTable(query.type.label, selected)
-                if (selected.isNotEmpty()) sections += ReportSection("Distribución", chart = selected.groupBy { if (module == Module.PLAN) it.shift else it.status }.map { ChartValue(it.key, it.value.size.toDouble()) }, donut = true)
+                if (selected.isNotEmpty()) sections += ReportSection("Distribución", chart = selected.groupBy { if (module == Module.PLAN) it.shift else it.status }.map { ChartValue(it.key, it.value.size.toDouble(), "selected") }, donut = true)
             }
             ReportType.OPERATORS -> {
                 val selected = (inRange.lastOrNull()?.operators ?: operators.values.toList()).filter { query.operatorId == null || it.id == query.operatorId }.sortedBy { it.name }

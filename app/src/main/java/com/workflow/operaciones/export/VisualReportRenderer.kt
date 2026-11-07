@@ -165,8 +165,9 @@ internal class VisualReportRenderer(private val context: Context) {
             val tones=listOf("teal","amber","blue","red","light","green","yellow","petrol")
             section.chart.forEachIndexed{i,item->
                 val sweep=if(total>0)(360*item.value/total).toFloat()else 0f
-                paint.color=color(tones[i]);paint.style=Paint.Style.STROKE;paint.strokeWidth=8f;canvas.drawArc(rect,angle,sweep,false,paint);angle+=sweep
-                paint.style=Paint.Style.FILL;paint.color=color(tones[i]);canvas.drawCircle(margin+133,y+47+i*18,3.5f,paint)
+                val tone=when(item.tone) { "rose"->"red"; "sage"->"teal"; "sand"->"amber"; "selected"->tones[i]; else->item.tone }
+                paint.color=color(tone);paint.style=Paint.Style.STROKE;paint.strokeWidth=8f;canvas.drawArc(rect,angle,sweep,false,paint);angle+=sweep
+                paint.style=Paint.Style.FILL;paint.color=color(tone);canvas.drawCircle(margin+133,y+47+i*18,3.5f,paint)
                 text("${item.label} · ${ReportBuilder.number(item.value)}",margin+143,y+41+i*18,9f)
             }
             paint.style=Paint.Style.FILL
