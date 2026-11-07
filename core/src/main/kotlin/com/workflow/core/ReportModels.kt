@@ -110,8 +110,11 @@ object ReportBuilder {
                 val present = attendance.filter { it.status in listOf("Presente", "Tardanza") }.mapNotNull { it.operatorId }.distinct().size
                 val tasks = rows.filter { it.module == Module.TASK }; val done = tasks.count { it.status == "Completada" }
                 val latest = inRange.lastOrNull()
+                val scopedAssets = latest?.assets.orEmpty()
+                    .filter { query.assetId == null || it.id == query.assetId }
+                    .filter { asset -> query.operatorId == null || rows.any { it.assetId == asset.id } }
                 metrics += listOf(ReportMetric("$present", "Presentes únicos", "sage"), ReportMetric("$done/${tasks.size}", "Tareas completadas"),
-                    ReportMetric("${latest?.assets?.count { it.state in listOf("En taller", "Inactivo temporal") } ?: 0}", "Equipos en taller", "sand"),
+                    ReportMetric("${scopedAssets.count { it.state in listOf("En taller", "Inactivo temporal") }}", "Equipos en taller", "sand"),
                     ReportMetric("${rows.count { it.module == Module.TICKET }}", "Tickets registrados"))
                 if (tasks.isNotEmpty()) sections += ReportSection("Avance de la jornada", chart = listOf(ChartValue("Completadas", done.toDouble()), ChartValue("Pendientes", (tasks.size-done).toDouble(), "amber")), donut = true, centerLabel = "${(100.0*done/tasks.size).roundToInt()}%")
                 sections += ReportSection("Estado por módulo", listOf("Módulo", "Registros", "Pendientes"), Module.entries.filter { it != Module.CLOSE }.map { module ->

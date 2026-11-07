@@ -139,4 +139,15 @@ class JourneyAndReportsTest {
         val single=ReportBuilder.build(ReportQuery(ReportType.TICKET,d.day,operationId=ticket.id),listOf(document(ops=listOf(ticket))))
         assertEquals(operator.name,single.banner!!.value);assertEquals("Emitido",single.banner!!.status)
     }
+
+    @Test fun general_report_equipment_metrics_respect_the_operator_and_equipment_filters() {
+        val first=Asset(UUID.randomUUID().toString(),"Primero","Mula","Inactivo temporal")
+        val second=Asset(UUID.randomUUID().toString(),"Segundo","Mula","Inactivo temporal")
+        val fuel=Operation(day="2026-11-06",module=Module.FUEL,title="Combustible",status="Pendiente",assetId=first.id,operatorId=operator.id)
+        val d=document(ops=listOf(fuel),assets=listOf(first,second))
+        val q=ReportQuery(ReportType.GENERAL,d.day)
+        assertEquals("2",ReportBuilder.build(q,listOf(d)).metrics[2].value)
+        assertEquals("1",ReportBuilder.build(q.copy(assetId=first.id),listOf(d)).metrics[2].value)
+        assertEquals("1",ReportBuilder.build(q.copy(operatorId=operator.id),listOf(d)).metrics[2].value)
+    }
 }
