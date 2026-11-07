@@ -211,12 +211,6 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                     Text("Puedes consultar y preparar fechas futuras. Para iniciar sus operaciones debes terminar las jornadas anteriores.",style=MaterialTheme.typography.bodyMedium)
                 }
             }
-            val missingAlarmTimes = doc.operations.filter { it.module == Module.TASK && it.status == "Pendiente" && !AgendaTime.valid(it.time) }
-            if(missingAlarmTimes.isNotEmpty())item { WFCard(Modifier.fillMaxWidth(),Brand.Sand) {
-                Text("${missingAlarmTimes.size} tareas necesitan hora de alarma",style=MaterialTheme.typography.titleSmall)
-                Text("Abre cada tarea de la agenda y guarda su hora antes de continuar las operaciones.")
-                TextButton(onClick={tab=1;module=null;catalog=null;plannerFilter="Pendientes"}){Text("Revisar tareas sin hora")}
-            } }
             if (editor != null || master != null) item {
                 WFCard(Modifier.fillMaxWidth(), Brand.Sand) {
                     Text("Tienes un formulario sin terminar", style = MaterialTheme.typography.titleSmall)
@@ -448,7 +442,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                     }
                     else {
                         item { Text("Configuración y catálogos", style = MaterialTheme.typography.headlineMedium) }
-                        item { Section("Alarmas de la agenda") { Text("Activa sonido, vibración y permisos para iniciar la jornada.");OutlinedButton(onClick={alarmSettings=true}){Text("Configurar alarmas")} } }
+                        item { Section("Alarmas de la agenda") { Text("Los avisos son opcionales. Puedes iniciar y continuar la jornada sin activarlos.");OutlinedButton(onClick={alarmSettings=true}){Text("Configurar alarmas")} } }
                         item { Section("Personal y equipos") {
                             listOf(Triple("operator", "Personal", vm.operators.size), Triple("asset", "Equipos", vm.assets.size), Triple("item", "Artículos", vm.items.size)).forEach { (kind, label, count) ->
                                 OutlinedButton(onClick = { openCatalog(kind) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("catalog-open-$kind")) {

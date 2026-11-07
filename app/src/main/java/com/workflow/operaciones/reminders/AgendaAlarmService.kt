@@ -31,9 +31,10 @@ class AgendaAlarmService : Service() {
             RECHECK -> if(running)scope.launch {
                 val docs=withContext(Dispatchers.IO){(application as WorkflowApp).repository.history()}
                 val access=AndroidAgendaAccess(this@AgendaAlarmService)
-                if(!access.notificationsAllowed() || !access.channelAllowed() || AgendaAlarms.plan(docs,Instant.now(),ZoneId.systemDefault()).none{it.key==activeKey})stopAlarm()
+                if(!access.enabled() || !access.notificationsAllowed() || !access.channelAllowed() || AgendaAlarms.plan(docs,Instant.now(),ZoneId.systemDefault()).none{it.key==activeKey})stopAlarm()
             } else stopSelf()
             RING -> {
+                if(!AndroidAgendaAccess(this).enabled()) { stopAlarm();return START_NOT_STICKY }
                 val day=intent.getStringExtra("day") ?: return START_NOT_STICKY
                 val title=intent.getStringExtra("title") ?: "Agenda pendiente"
                 activeKey=intent.getStringExtra("key").orEmpty()

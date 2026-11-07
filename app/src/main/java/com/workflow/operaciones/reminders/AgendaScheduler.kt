@@ -50,7 +50,7 @@ class AgendaScheduler(private val context: Context, private val documents: suspe
             val old=state.getStringSet("scheduled",emptySet()).orEmpty().toSet()
             val eligible=plan.values.filter { it.key !in delivered }
             // Keep below Android's per-UID alarm quota, rearming the next tasks after each event.
-            val desired=if(access.exactAllowed()&&access.notificationsAllowed()&&access.channelAllowed())
+            val desired=if(access.enabled()&&access.exactAllowed()&&access.notificationsAllowed()&&access.channelAllowed())
                 (eligible.filter{it.taskId==null}+eligible.filter{it.taskId!=null}.sortedBy{it.at}.take(126)).associateBy{it.key}
                 else emptyMap()
             (old-desired.keys).forEach { val alarm=broadcast(it);manager.cancel(alarm);alarm.cancel() }
@@ -60,7 +60,7 @@ class AgendaScheduler(private val context: Context, private val documents: suspe
                 manager.setAlarmClock(AlarmManager.AlarmClockInfo(at,show),broadcast(alarm.key))
             }
             state.edit().putStringSet("scheduled",desired.keys.toSet()).putStringSet("delivered",delivered).apply()
-            problem=if(plan.isNotEmpty()&&desired.isEmpty()&&(!access.exactAllowed()||!access.notificationsAllowed()||!access.channelAllowed())) "Activa los permisos, sonido y vibración para recibir las alarmas de la agenda." else null
+            problem=if(access.enabled()&&plan.isNotEmpty()&&desired.isEmpty()&&(!access.exactAllowed()||!access.notificationsAllowed()||!access.channelAllowed())) "Los avisos están pausados por los ajustes de Android. Puedes seguir trabajando sin alarmas." else null
             if(AgendaAlarmService.running)context.startService(Intent(context,AgendaAlarmService::class.java).setAction(AgendaAlarmService.RECHECK))
         } catch (_:SecurityException) { problem="Autoriza las alarmas y notificaciones de WorkFlow." }
         catch (_:Exception) { problem="No se pudieron programar las alarmas. Revisa su configuración." }
@@ -71,7 +71,7 @@ class AgendaScheduler(private val context: Context, private val documents: suspe
                 if(intent.action==FIRE) {
                     val key=intent.data?.lastPathSegment ?: return@launch
                     val access=AndroidAgendaAccess(context)
-                    if(!access.notificationsAllowed()||!access.exactAllowed()||!access.channelAllowed())return@launch
+                    if(!access.enabled()||!access.notificationsAllowed()||!access.exactAllowed()||!access.channelAllowed())return@launch
                     val alarm=mutex.withLock {
                         val candidate=AgendaAlarms.plan(documents(),Instant.now(),ZoneId.systemDefault()).firstOrNull { it.key==key }
                         val delivered=state.getStringSet("delivered",emptySet()).orEmpty()

@@ -94,12 +94,9 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
                 }
                 require(old == null || old.day == value.day) { "No se puede mover un registro a otra fecha" }
                 val sameDay = dao.operations(value.day).map { json.decodeFromString<Operation>(it.payload) }
-                if (value.module == Module.TASK && value.status == "Pendiente") AgendaTime.requireTime(value.time)
                 val resolving = old != null && ((value.module == Module.TASK && value.status == "Completada") || (value.module == Module.FAULT && value.status == "Cerrada"))
                 if (DayControl.isExecution(value) && !resolving) {
                     DayControl.requirePreviousFinished(dao.documents().map(::decodeDocument), value.day)
-                    agendaAccess.requireReady()
-                    require(sameDay.none { it.module == Module.TASK && it.status == "Pendiente" && !AgendaTime.valid(it.time) }) { "Asigna una hora de alarma a las tareas pendientes de esta jornada antes de continuar sus operaciones." }
                 }
                 val closed = sameDay.any { it.module == Module.CLOSE && it.status == "Cerrada" }
                 val resolvingEarlierFault = value.module == Module.FAULT && value.status == "Cerrada" && old != null && value.day < java.time.LocalDate.now().toString()
@@ -140,7 +137,7 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
     private suspend fun putAutomaticTask(task: Operation) {
         val before = dao.operation(task.id)
         val prepared = if (task.status == "Pendiente") task.copy(time = task.time.ifBlank { before?.let { json.decodeFromString<Operation>(it.payload).time }.orEmpty().ifBlank { agendaAccess.defaultTime() } }) else task
-        if (prepared.status == "Pendiente") AgendaTime.requireTime(prepared.time)
+        if (prepared.time.isNotEmpty()) AgendaTime.requireTime(prepared.time)
         val payload = json.encodeToString(prepared)
         dao.putOperation(OperationRow(prepared.id, prepared.day, prepared.module.name, prepared.naturalKey(), payload))
         dao.audit(AuditRow(at = Instant.now().toString(), action = "LINKED_TASK", recordId = task.id, before = before?.payload, after = payload))
@@ -191,7 +188,6 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
     suspend fun startDay(day: String, selected: Set<String>, times: Map<String, String> = emptyMap()) = withContext(Dispatchers.IO) {
         mutex.withLock {
             val doc = db.withTransaction {
-                agendaAccess.requireReady()
                 DayControl.requirePreviousFinished(dao.documents().map(::decodeDocument), day)
                 val previous = dao.document(day)?.let(::decodeDocument)
                 require(previous?.startedAt.isNullOrEmpty()) { "La jornada ya está iniciada" }
@@ -199,7 +195,7 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
                 require(existing.none { it.module == Module.CLOSE && it.status == "Cerrada" }) { "Reabre el día antes de iniciar sus actividades" }
                 existing.filter { it.module == Module.TASK && it.status == "Pendiente" }.forEach { task ->
                     val time = times[task.id] ?: task.time
-                    AgendaTime.requireTime(time)
+                    if (time.isNotEmpty()) AgendaTime.requireTime(time)
                     if (time != task.time) putAutomaticTask(task.copy(time = time, updatedAt = Instant.now().toString()))
                 }
                 DayTemplates.operations(day, selected).filter { task -> existing.none { it.templateKey == task.templateKey } }.forEach { putAutomaticTask(it.copy(time = times[it.templateKey] ?: agendaAccess.defaultTime())) }
@@ -315,7 +311,6 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
                 val old = dao.document(doc.day)?.let(::decodeDocument)
                 if (DayControl.started(doc)) {
                     DayControl.requirePreviousFinished(dao.documents().map(::decodeDocument), doc.day)
-                    agendaAccess.requireReady()
                 }
                 decision = old?.let { ContinuationPolicy.decide(it, doc) } ?: ContinuationDecision.LOAD
                 if (decision == ContinuationDecision.ALREADY_LOADED) return@withTransaction null

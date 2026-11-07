@@ -78,7 +78,6 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
             require(title.isNotBlank()) { "Escribe una descripción para el registro" }
             val number = if (quantity.isBlank()) 0.0 else quantity.replace(',', '.').toDoubleOrNull() ?: throw IllegalArgumentException("Cantidad inválida")
             val operation = original.copy(id = draftId, title = title.trim(), status = status, operatorId = opId.ifEmpty { null }, assetId = assetId.ifEmpty { null }, itemId = itemId.ifEmpty { null }, operatorIds = selected.toList().sorted(), shift = shift, mealType = mealType, extended = ext, quantity = number, time = time.trim(), notes = notes.trim(), resolvedAt = if (kind == Module.FAULT && status != "Cerrada") "" else original.resolvedAt, severity = severity, expected = expected.trim(), actual = actual.trim(), recordedBy = original.recordedBy.ifBlank { vm.document?.supervisor.orEmpty() })
-            if (kind == Module.TASK && status == "Pendiente") AgendaTime.requireTime(time.trim())
             Rules.operation(operation, vm.operators, vm.assets, vm.items)
             if (kind == Module.CLOSE && status == "Cerrada" && DailySummary.pending(vm.document!!).isNotEmpty()) require(notes.isNotBlank()) { "Explica los pendientes del cierre del día" }
             if (isNew) require(vm.document?.operations?.none { it.id == draftId } != false) { "Este registro ya está guardado. Cierra el formulario y pulsa Añadir para crear otro." }
@@ -131,7 +130,7 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
                 }
             }
         }
-        OutlinedTextField(time, { time = it }, label = { Text(if (kind == Module.TASK) "Hora de la alarma · HH:mm" else "Hora aproximada HH:mm (opcional)") }, modifier = Modifier.fillMaxWidth().testTag("operation-time"), singleLine = true)
+        OutlinedTextField(time, { time = it }, label = { Text(if (kind == Module.TASK) "Hora de la tarea · HH:mm (opcional)" else "Hora aproximada HH:mm (opcional)") }, modifier = Modifier.fillMaxWidth().testTag("operation-time"), singleLine = true)
         OutlinedTextField(notes, { notes = it }, label = { Text(if (kind == Module.CLOSE) "Pendientes y excepciones del cierre" else "Detalles / seguimiento / resolución") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("operation-notes"))
         if (kind == Module.TICKET) {
             Options("Nivel de la infracción", severity, listOf("Leve", "Moderada", "Grave")) { severity = it }

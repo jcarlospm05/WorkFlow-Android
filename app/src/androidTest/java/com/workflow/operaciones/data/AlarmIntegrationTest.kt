@@ -40,12 +40,13 @@ class AlarmIntegrationTest {
         clearPending()
         AgendaScheduler.createChannel(context)
         AndroidAgendaAccess(context).setDefaultTime("09:00")
+        AndroidAgendaAccess(context).setEnabled(true)
         if(Build.VERSION.SDK_INT>=31)shell("appops set ${context.packageName} SCHEDULE_EXACT_ALARM allow")
         if(Build.VERSION.SDK_INT>=33)shell("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
         shell("cmd media_session volume --stream 4 --set 5")
     }
     @After fun finish(): Unit=runBlocking {
-        clearPending();app.agendaScheduler.reconcile()
+        clearPending();AndroidAgendaAccess(context).setEnabled(false);app.agendaScheduler.reconcile()
         context.stopService(Intent(context,AgendaAlarmService::class.java))
     }
     @Test fun exact_alarm_is_registered_and_cancelled_when_task_is_completed()=runBlocking {
@@ -55,10 +56,29 @@ class AlarmIntegrationTest {
         val next=context.getSystemService(AlarmManager::class.java).nextAlarmClock
         assertNotNull(next)
         assertEquals(due.withSecond(0).withNano(0).toInstant().toEpochMilli(),next!!.triggerTime)
+        AndroidAgendaAccess(context).setEnabled(false);app.agendaScheduler.reconcile()
+        assertNull(context.getSystemService(AlarmManager::class.java).nextAlarmClock)
+        assertEquals("Pendiente",repo.document(task.day).operations.single{it.id==task.id}.status)
+        AndroidAgendaAccess(context).setEnabled(true);app.agendaScheduler.reconcile()
+        assertNotNull(context.getSystemService(AlarmManager::class.java).nextAlarmClock)
         repo.save(repo.document(task.day).operations.single{it.id==task.id}.copy(status="Completada"))
         repo.save(Operation(day=task.day,module=Module.CLOSE,title="Cierre",status="Cerrada"))
         app.agendaScheduler.reconcile()
         assertNull(context.getSystemService(AlarmManager::class.java).nextAlarmClock)
+    }
+    @Test fun disabled_alarms_and_blank_default_hour_do_not_block_real_repository()=runBlocking {
+        val access=AndroidAgendaAccess(context)
+        access.setEnabled(false);access.setDefaultTime("")
+        val day=LocalDate.now().toString()
+        if(DayControl.closed(repo.document(day)))repo.save(Operation(day=day,module=Module.CLOSE,title="Reapertura",status="Reabierta"))
+        val task=Operation(day=day,module=Module.TASK,title="Trabajo sin aviso",status="Pendiente")
+        repo.save(task)
+        if(!DayControl.started(repo.document(day)))repo.startDay(day,setOf("dinner"))
+        app.agendaScheduler.reconcile()
+        assertNull(context.getSystemService(AlarmManager::class.java).nextAlarmClock)
+        assertFalse(AgendaAlarmService.running)
+        repo.save(task.copy(status="Completada"))
+        assertEquals("Completada",repo.document(day).operations.single{it.id==task.id}.status)
     }
     @Test fun overdue_alarm_fires_without_a_fake_record_and_stops_after_resolving_the_day()=runBlocking {
         val due=ZonedDateTime.now().minusMinutes(1)

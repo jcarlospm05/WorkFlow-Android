@@ -42,8 +42,13 @@ class AgendaControlTest {
         assertNotEquals(event.key,AgendaAlarms.plan(listOf(updated),now,ZoneOffset.UTC).single().key)
         assertTrue(AgendaAlarms.plan(listOf(d.copy(operations=listOf(d.operations.single().copy(status="Completada")))),now,ZoneOffset.UTC).none{it.taskId!=null})
     }
-    @Test fun invalid_and_missing_hours_are_rejected_without_changing_legacy_decode() {
+    @Test fun explicitly_requested_alarm_hours_must_be_valid() {
         listOf("","25:00","7:00","19:75").forEach { assertFails{AgendaTime.requireTime(it)} }
         AgendaTime.requireTime("19:00")
+    }
+    @Test fun pending_tasks_without_hours_do_not_schedule_task_alarms() {
+        val d=doc("2026-11-06",started=false,pending=true)
+        val withoutHour=d.copy(operations=listOf(d.operations.single().copy(time="")))
+        assertTrue(AgendaAlarms.plan(listOf(withoutHour),Instant.parse("2026-11-06T08:00:00Z"),ZoneOffset.UTC).isEmpty())
     }
 }

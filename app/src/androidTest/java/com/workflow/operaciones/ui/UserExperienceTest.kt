@@ -83,6 +83,17 @@ class UserExperienceTest {
         if (::model.isInitialized) model.repository.transferKeys.clear()
         if (::db.isInitialized) db.close()
     }
+    @Test fun task_form_saves_without_an_alarm_hour() {
+        prepare()
+        val open=mutableStateOf(true)
+        val task=Operation(day=model.day,module=Module.TASK,title="Tarea sin alarma",status="Pendiente")
+        show { if(open.value)OperationEditor(task,model){open.value=false} else Text("Tarea guardada") }
+        field("operation-time","")
+        tap("dialog-confirm")
+        compose.waitUntil(30_000){!model.busy&&!open.value}
+        assertEquals("",model.document!!.operations.single{it.id==task.id}.time)
+        assertEquals("Pendiente",model.document!!.operations.single{it.id==task.id}.status)
+    }
     @Test fun multiple_catalog_entries_stay_in_the_form_and_employee_codes_are_optional() {
         prepare()
         listOf("operator", "asset", "item").forEach { kind ->

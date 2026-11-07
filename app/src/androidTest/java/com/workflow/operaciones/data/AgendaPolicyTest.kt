@@ -20,17 +20,36 @@ class AgendaPolicyTest {
     private val first="2026-11-03"
     private val next="2026-11-06"
     @After fun close(){db.close()}
-    @Test fun missing_permissions_prevent_start_without_creating_tasks_or_erasing_data()=runBlocking {
-        val locked=WorkflowRepository(context,db,TestAgendaAccess(false))
-        val before=locked.document(first)
-        try{locked.startDay(first,setOf("dinner"));fail("Debe exigir permisos")}catch(_:IllegalArgumentException){}
-        assertEquals(before,locked.document(first))
-        assertTrue(locked.document(first).operations.isEmpty())
+    @Test fun unconfigured_alarms_allow_start_and_operations_with_tasks_without_hours()=runBlocking {
+        val optional=WorkflowRepository(context,db,TestAgendaAccess(""))
+        val person=Operator(UUID.randomUUID().toString(),name="Persona sintética de agenda")
+        optional.addOperator(person,first)
+        val manual=Operation(day=first,module=Module.TASK,title="Tarea sin alarma",status="Pendiente")
+        optional.save(manual)
+        optional.startDay(first,setOf("dinner"))
+        optional.save(Operation(day=first,module=Module.ATTENDANCE,title="Asistencia",status="Presente",operatorId=person.id))
+        val doc=optional.document(first)
+        assertTrue(doc.startedAt.isNotEmpty())
+        assertTrue(doc.operations.filter{it.module==Module.TASK}.all{it.time.isEmpty()})
+        assertEquals(2,doc.operations.count{it.module==Module.TASK})
+        assertTrue(doc.operations.any{it.module==Module.ATTENDANCE})
     }
-    @Test fun a_pending_task_requires_a_valid_alarm_hour()=runBlocking {
-        val before=repository.document(first)
-        try{repository.save(Operation(day=first,module=Module.TASK,title="Sin hora",status="Pendiente"));fail("Debe exigir hora")}catch(_:IllegalArgumentException){}
-        assertEquals(before,repository.document(first))
+    @Test fun a_task_can_be_saved_and_edited_without_an_hour_but_invalid_hours_are_rejected()=runBlocking {
+        val task=Operation(day=first,module=Module.TASK,title="Sin hora",status="Pendiente")
+        repository.save(task)
+        repository.save(task.copy(title="Tarea editada sin alarma"))
+        assertEquals("",repository.document(first).operations.single().time)
+        try{repository.save(task.copy(time="25:90"));fail("La hora opcional debe ser válida si se escribe")}catch(_:IllegalArgumentException){}
+        assertEquals("Tarea editada sin alarma",repository.document(first).operations.single().title)
+    }
+    @Test fun incoming_started_day_can_be_continued_without_alarm_configuration()=runBlocking {
+        val optional=WorkflowRepository(context,db,TestAgendaAccess(""))
+        val incoming=DailyCodec.seal(optional.document(first).copy(originId=UUID.randomUUID().toString(),journeyId=UUID.randomUUID().toString(),versionVector=emptyMap(),startedAt="2026-11-03T07:00:00Z",operations=listOf(Operation(day=first,module=Module.TASK,title="Continuar sin alarma",status="Pendiente"))))
+        assertEquals(ContinuationDecision.LOAD,optional.continueDay(incoming))
+        val task=optional.document(first).operations.single()
+        assertEquals("",task.time)
+        optional.save(task.copy(status="Completada"))
+        assertEquals("Completada",optional.document(first).operations.single().status)
     }
     @Test fun previous_day_must_be_closed_and_its_tasks_completed_but_days_off_are_skipped()=runBlocking {
         repository.startDay(first,setOf("dinner"))
