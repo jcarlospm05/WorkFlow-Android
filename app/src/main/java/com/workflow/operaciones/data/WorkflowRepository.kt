@@ -83,20 +83,24 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
         mutex.withLock {
             val docs = db.withTransaction {
                 val (ops, assets, items) = loadMasters()
-                Rules.operation(value, ops, assets, items)
+                val checked = if (value.module == Module.FAULT) value.copy(resolvedAt = if (value.status == "Cerrada") value.resolvedAt.ifBlank { Instant.now().toString() } else "") else value
+                Rules.operation(checked, ops, assets, items)
                 val old = dao.operation(value.id)
                 require(old == null || old.day == value.day) { "No se puede mover un registro a otra fecha" }
                 val sameDay = dao.operations(value.day).map { json.decodeFromString<Operation>(it.payload) }
                 val closed = sameDay.any { it.module == Module.CLOSE && it.status == "Cerrada" }
                 val resolvingEarlierFault = value.module == Module.FAULT && value.status == "Cerrada" && old != null && value.day < java.time.LocalDate.now().toString()
                 require(!closed || resolvingEarlierFault || (value.module == Module.CLOSE && value.status == "Reabierta")) { "Reabre la jornada antes de corregirla" }
-                if (value.module == Module.CLOSE && value.status == "Cerrada" && sameDay.any { it.status in listOf("Pendiente", "Abierta", "En proceso", "Borrador") }) {
+                val unresolvedEarlierFault = if (value.module == Module.CLOSE) dao.allOperations().map { json.decodeFromString<Operation>(it.payload) }.any {
+                    it.module == Module.FAULT && it.day < value.day && (it.status != "Cerrada" || (it.resolvedAt.isNotBlank() && resolutionDay(it) > value.day))
+                } else false
+                if (value.module == Module.CLOSE && value.status == "Cerrada" && (unresolvedEarlierFault || sameDay.any { it.status in listOf("Pendiente", "Abierta", "En proceso", "Borrador") })) {
                     require(value.notes.isNotBlank()) { "Explica los pendientes y excepciones del cierre" }
                 }
                 val key = value.naturalKey()
                 val match = if (key == null) null else sameDay.firstOrNull { it.naturalKey() == key }
                 require(old == null || match == null || match.id == value.id) { "Ya existe otro registro para ese operador, turno o comida" }
-                val normalized = value.copy(id = match?.id ?: value.id, updatedAt = Instant.now().toString())
+                val normalized = checked.copy(id = match?.id ?: value.id, updatedAt = Instant.now().toString())
                 val previous = dao.operation(normalized.id)
                 val payload = json.encodeToString(normalized)
                 dao.putOperation(OperationRow(normalized.id, normalized.day, normalized.module.name, key, payload))
@@ -104,8 +108,6 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
                 if (task != null) putAutomaticTask(task)
                 updateTemplateProgress(normalized.day)
                 if (normalized.module == Module.FAULT) {
-                    val resolved = if (normalized.status == "Cerrada") normalized.copy(resolvedAt = normalized.resolvedAt.ifBlank { Instant.now().toString() }) else normalized.copy(resolvedAt = "")
-                    dao.putOperation(OperationRow(resolved.id, resolved.day, resolved.module.name, key, json.encodeToString(resolved)))
                     updateWorkshopAssets()
                     ensureWorkshopTask(normalized.day, reopen = normalized.status != "Cerrada")
                 }

@@ -252,7 +252,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                 1 -> {
                     val tasks = doc.operations.filter { it.module == Module.TASK }
                     val done = tasks.count { it.status == "Completada" }
-                    val agenda = doc.operations.filter { it.module in listOf(Module.TASK, Module.PLAN) }.filter { plannerFilter == "Todas" || (plannerFilter == "Completadas" && it.status == "Completada") || (plannerFilter == "Pendientes" && it.status != "Completada") }.sortedBy { it.time }
+                    val agenda = doc.operations.filter { it.module == Module.TASK || (it.module == Module.PLAN && doc.operations.none { task -> task.module == Module.TASK && task.sourceId == it.id }) }.filter { plannerFilter == "Todas" || (plannerFilter == "Completadas" && it.status == "Completada") || (plannerFilter == "Pendientes" && it.status != "Completada") }.sortedBy { it.time }
                     item { WFHeading("Mi jornada", doc.day) { dateDialog = true } }
                     item { WeekStrip(doc.day, vm::chooseDay) }
                     item { ListReportActions(ReportQuery(ReportType.WEEK, doc.day), reportDocuments, { reportOptions = it }, { vm.message = it }) }
@@ -479,6 +479,8 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
     vm.preview?.let { incoming ->
         val conflict = vm.incomingDecision in listOf(ContinuationDecision.CONFLICT, ContinuationDecision.OLDER)
         var replacing by rememberSaveable(incoming.checksum) { mutableStateOf(false) }
+        var inspectIncoming by rememberSaveable(incoming.checksum) { mutableStateOf(false) }
+        var inspectLocal by rememberSaveable(incoming.checksum) { mutableStateOf(false) }
         val local = vm.history.firstOrNull { it.day == incoming.day }
         SafeAlertDialog(onDismissRequest = vm::dismissPreview, title = { Text(if (conflict) "Revisar versiones de la jornada" else "Cargar jornada compartida") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -489,9 +491,13 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                     Text("En este teléfono: ${local?.operations?.size ?: 0} registros\nRecibidos: ${incoming.operations.size} registros")
                     Text(if (replacing) "Al continuar usarás la jornada recibida en esta fecha. Se conserva una copia de la versión anterior en el historial interno." else "Puedes cancelar para conservar tu jornada o revisar la sustitución antes de continuar.")
                 }
+                TextButton(onClick = { inspectIncoming = true }) { Text("Ver jornada recibida") }
+                if (conflict && local != null) TextButton(onClick = { inspectLocal = true }) { Text("Ver mi jornada") }
                 vm.actionError?.let { Text(it, color = Brand.Red) }
             }
         }, confirmButton = { TextButton(onClick = { if (conflict && !replacing) replacing = true else vm.acceptPreview(replaceConflict = replacing) }, enabled = !vm.busy) { Text(if (conflict && !replacing) "Revisar sustitución" else if (replacing) "Sustituir y continuar" else "Cargar jornada") } }, dismissButton = { TextButton(onClick = vm::dismissPreview) { Text("Cancelar") } })
+        if (inspectIncoming) VisualReportViewer(ReportQuery(ReportType.GENERAL, incoming.day), listOf(incoming)) { inspectIncoming = false }
+        if (inspectLocal && local != null) VisualReportViewer(ReportQuery(ReportType.GENERAL, local.day), listOf(local)) { inspectLocal = false }
     }
     vm.shareRequest?.let { report ->
         var otherApps by remember { mutableStateOf(false) }

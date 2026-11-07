@@ -51,7 +51,7 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
 @Composable private fun Options(label: String, value: String, choices: List<String>, set: (String) -> Unit) = Choice(label, value, choices.map { it to it }, set)
 @Composable fun OperationEditor(original: Operation, vm: WorkflowViewModel, addMaster: ((String) -> Unit)? = null, onDismiss: () -> Unit) {
     LaunchedEffect(original.id) { vm.clearActionError() }
-    val isNew = rememberSaveable(original.id) { vm.document?.operations?.none { it.id == original.id } != false }
+    val isNew = rememberSaveable(original.id) { (vm.history.flatMap { it.operations + it.carryOverFaults } + (vm.document?.let { it.operations + it.carryOverFaults } ?: emptyList())).none { it.id == original.id } }
     var draftId by rememberSaveable(original.id) { mutableStateOf(original.id) }
     var savedCount by rememberSaveable(original.id) { mutableStateOf(0) }
     val titleFocus = remember { FocusRequester() }
@@ -77,7 +77,7 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
         try {
             require(title.isNotBlank()) { "Escribe una descripción para el registro" }
             val number = if (quantity.isBlank()) 0.0 else quantity.replace(',', '.').toDoubleOrNull() ?: throw IllegalArgumentException("Cantidad inválida")
-            val operation = original.copy(id = draftId, title = title.trim(), status = status, operatorId = opId.ifEmpty { null }, assetId = assetId.ifEmpty { null }, itemId = itemId.ifEmpty { null }, operatorIds = selected.toList().sorted(), shift = shift, mealType = mealType, extended = ext, quantity = number, time = time.trim(), notes = notes.trim(), severity = severity, expected = expected.trim(), actual = actual.trim(), recordedBy = original.recordedBy.ifBlank { vm.document?.supervisor.orEmpty() })
+            val operation = original.copy(id = draftId, title = title.trim(), status = status, operatorId = opId.ifEmpty { null }, assetId = assetId.ifEmpty { null }, itemId = itemId.ifEmpty { null }, operatorIds = selected.toList().sorted(), shift = shift, mealType = mealType, extended = ext, quantity = number, time = time.trim(), notes = notes.trim(), resolvedAt = if (kind == Module.FAULT && status != "Cerrada") "" else original.resolvedAt, severity = severity, expected = expected.trim(), actual = actual.trim(), recordedBy = original.recordedBy.ifBlank { vm.document?.supervisor.orEmpty() })
             Rules.operation(operation, vm.operators, vm.assets, vm.items)
             if (kind == Module.CLOSE && status == "Cerrada" && DailySummary.pending(vm.document!!).isNotEmpty()) require(notes.isNotBlank()) { "Explica los pendientes del cierre del día" }
             vm.save(operation, offerShare = !another) {

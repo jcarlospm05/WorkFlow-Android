@@ -30,13 +30,16 @@ class MainActivity : FragmentActivity() {
         get() = PhoneSession.unlocked
         set(value) { PhoneSession.unlocked = value }
     private var promptActive = false
+    private var credentialGeneration = 0
     private var attempted = false
     private var unlockError by mutableStateOf<String?>(null)
     private var inbound by mutableStateOf<Uri?>(null)
     private lateinit var model: WorkflowViewModel
     private val credentialLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         promptActive = false
-        if (result.resultCode == RESULT_OK) unlocked = true
+        if (credentialGeneration != PhoneSession.lockGeneration) {
+            attempted = false; unlockError = null; window.decorView.post { unlock() }
+        } else if (result.resultCode == RESULT_OK && !getSystemService(KeyguardManager::class.java).isDeviceLocked) unlocked = true
         else unlockError = "Desbloqueo cancelado"
     }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,7 +63,7 @@ class MainActivity : FragmentActivity() {
                         Spacer(Modifier.height(24.dp))
                         Text("Tu información está protegida", style = MaterialTheme.typography.titleLarge)
                         Text("Desbloquea con la seguridad de Android. El teléfono debe tener PIN, patrón, contraseña o biometría.")
-                        LaunchedEffect(unlocked) { if (!unlocked && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) unlock() }
+                        LaunchedEffect(unlocked, PhoneSession.presentEvents, PhoneSession.lockGeneration) { if (!unlocked && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) unlock() }
                         unlockError?.let { Text(it, color = Brand.Red); TextButton(onClick = { attempted = false; unlock() }) { Text("Intentar de nuevo") } }
                         TextButton(onClick = { startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }) { Text("Configurar bloqueo del teléfono") }
                     }
@@ -70,12 +73,13 @@ class MainActivity : FragmentActivity() {
     }
     @Suppress("DEPRECATION")
     private fun unlock() {
-        if (unlocked || promptActive || attempted || getSystemService(KeyguardManager::class.java).isDeviceLocked) return
+        if (isFinishing || isDestroyed || !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) || unlocked || promptActive || attempted || getSystemService(KeyguardManager::class.java).isDeviceLocked) return
         attempted = true; unlockError = null
         val keyguard = getSystemService(KeyguardManager::class.java)
+        val generation = PhoneSession.lockGeneration
         fun credential() {
             val intent = keyguard.createConfirmDeviceCredentialIntent("WorkFlow", "Desbloquear datos del supervisor")
-            if (intent != null) { promptActive = true; credentialLauncher.launch(intent) }
+            if (intent != null) { credentialGeneration = PhoneSession.lockGeneration; promptActive = true; credentialLauncher.launch(intent) }
             else unlockError = "Configura un PIN, patrón, contraseña o biometría en el teléfono"
         }
         val authenticators = if (Build.VERSION.SDK_INT >= 30) BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL else BiometricManager.Authenticators.BIOMETRIC_STRONG
@@ -83,9 +87,14 @@ class MainActivity : FragmentActivity() {
             credential(); return
         }
         val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
-            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) { promptActive = false; unlocked = true }
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                promptActive = false
+                if (generation == PhoneSession.lockGeneration && !keyguard.isDeviceLocked) unlocked = true
+                else { attempted = false; window.decorView.post { unlock() } }
+            }
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                 promptActive = false
+                if (generation != PhoneSession.lockGeneration) { attempted = false; unlockError = null; window.decorView.post { unlock() }; return }
                 if (Build.VERSION.SDK_INT < 30 && errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) credential()
                 else unlockError = "No se completó el desbloqueo. Puedes intentarlo de nuevo."
             }

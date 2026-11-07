@@ -79,7 +79,7 @@ object ReportBuilder {
         val assets = docs.flatMap { it.assets }.associateBy { it.id }
         val items = docs.flatMap { it.items }.associateBy { it.id }
         val all = docs.flatMap { it.operations + it.carryOverFaults }.associateBy { it.id }.values.toList()
-        val rows = all.filter { op -> op.day in query.from..query.to || (query.type in listOf(ReportType.WORKSHOP, ReportType.ASSET_HISTORY) && op.module == Module.FAULT && op.day <= query.to && (op.status != "Cerrada" || (op.resolvedAt.isNotBlank() && java.time.Instant.parse(op.resolvedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString() >= query.from))) }
+        val rows = all.filter { op -> op.day in query.from..query.to || (query.type in listOf(ReportType.GENERAL, ReportType.CLOSE, ReportType.WORKSHOP, ReportType.ASSET_HISTORY) && op.module == Module.FAULT && op.day <= query.to && (op.status != "Cerrada" || (op.resolvedAt.isNotBlank() && java.time.Instant.parse(op.resolvedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString() >= query.from))) }
             .filter { query.operatorId == null || it.operatorId == query.operatorId || query.operatorId in it.operatorIds }
             .filter { query.assetId == null || it.assetId == query.assetId }
             .filter { query.operationId == null || it.id == query.operationId }
@@ -123,7 +123,8 @@ object ReportBuilder {
                 } else sections += recordTable("Novedades de la operación", rows.filter { it.module !in listOf(Module.TASK, Module.CLOSE) })
             }
             ReportType.WEEK, ReportType.MONTH -> {
-                val tasks = rows.filter { it.module in listOf(Module.TASK, Module.PLAN) }
+                val representedPlans = rows.filter { it.module == Module.TASK }.mapNotNull { it.sourceId }.toSet()
+                val tasks = rows.filter { it.module == Module.TASK || (it.module == Module.PLAN && it.id !in representedPlans) }
                 metrics += listOf(ReportMetric("${tasks.size}", "Actividades programadas"), ReportMetric("${tasks.count { it.status == "Completada" }}", "Completadas", "sage"),
                     ReportMetric("${tasks.count { it.status !in listOf("Completada", "Libre disfrutado", "Libre confirmado") }}", "Pendientes / previstas", "sand"))
                 if (query.type == ReportType.MONTH) {

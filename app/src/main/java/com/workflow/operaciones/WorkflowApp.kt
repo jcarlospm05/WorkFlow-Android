@@ -18,11 +18,18 @@ class WorkflowApp : Application() {
         super.onCreate()
         ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action == Intent.ACTION_SCREEN_OFF) PhoneSession.unlocked = false
+                when (intent?.action) {
+                    Intent.ACTION_SCREEN_OFF -> { PhoneSession.lockGeneration++; PhoneSession.unlocked = false }
+                    Intent.ACTION_USER_PRESENT -> PhoneSession.presentEvents++
+                }
             }
-        }, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }, IntentFilter(Intent.ACTION_SCREEN_OFF).apply { addAction(Intent.ACTION_USER_PRESENT) }, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 }
 
 /** Memory only: app switching keeps the session; screen-off and process death revoke it. */
-object PhoneSession { var unlocked by mutableStateOf(false) }
+object PhoneSession {
+    var unlocked by mutableStateOf(false)
+    var lockGeneration by mutableStateOf(0)
+    var presentEvents by mutableStateOf(0)
+}

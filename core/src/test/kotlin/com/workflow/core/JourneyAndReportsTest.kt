@@ -106,4 +106,27 @@ class JourneyAndReportsTest {
         assertEquals(ContinuationDecision.CONFLICT,ContinuationPolicy.decide(d,d.copy(supervisor="Cambio sin versión")))
         assertEquals(ContinuationDecision.ALREADY_LOADED,ContinuationPolicy.decide(d,d.copy(originId=b,revision=9,generatedAt="2026-11-07T12:00:00Z")))
     }
+
+    @Test fun pending_summary_does_not_double_count_a_task_and_its_activity() {
+        val asset=Asset(UUID.randomUUID().toString(),"Equipo","Mula")
+        val fuel=Operation(day="2026-11-06",module=Module.FUEL,title="Combustible",status="Pendiente",assetId=asset.id)
+        val task=LinkedTasks.forOperation(fuel,emptyList(),asset)!!
+        val d=document(ops=listOf(fuel,task),assets=listOf(asset))
+        assertEquals(listOf(task.id),DailySummary.pending(d).map{it.id})
+        assertEquals(listOf(fuel.id),DailySummary.pending(d.copy(operations=listOf(fuel,task.copy(status="Completada")))).map{it.id})
+        val fault=Operation(day="2026-11-05",module=Module.FAULT,title="Avería anterior",status="Abierta",assetId=asset.id)
+        val carried=d.copy(operations=emptyList(),carryOverFaults=listOf(fault))
+        assertEquals(listOf(fault),DailySummary.pending(carried))
+        assertContains(ReportBuilder.build(ReportQuery(ReportType.CLOSE,carried.day),listOf(carried)).text(),fault.title)
+    }
+
+
+    @Test fun agenda_does_not_duplicate_a_plan_that_already_has_a_linked_task() {
+        val plan=Operation(day="2026-11-06",module=Module.PLAN,title="Turno",status="Programado",operatorId=operator.id)
+        val task=LinkedTasks.forOperation(plan,emptyList(),null)!!
+        val d=document(ops=listOf(plan,task))
+        val report=ReportBuilder.build(ReportQuery(ReportType.WEEK,d.day),listOf(d))
+        assertEquals("1",report.metrics.first().value)
+        assertEquals(1,report.sections.last().rows.size)
+    }
 }

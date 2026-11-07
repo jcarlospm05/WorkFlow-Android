@@ -121,4 +121,18 @@ class DayContinuationTest {
         assertEquals("Cerrada",a.document(day).carryOverFaults.single().status)
     }
 
+
+    @Test fun closing_a_day_lists_and_requires_notes_for_an_earlier_unresolved_fault()=runBlocking {
+        val asset=Asset(UUID.randomUUID().toString(),"Equipo de prueba","Mula")
+        a.addAsset(asset,"2026-11-05")
+        a.save(Operation(day="2026-11-05",module=Module.FAULT,title="Avería anterior",status="Abierta",assetId=asset.id))
+        a.startDay(day,emptySet())
+        val review=a.document(day).operations.single{it.templateKey=="workshop-review"}
+        a.save(review.copy(status="Completada"))
+        assertEquals(1,DailySummary.pending(a.document(day)).size)
+        try { a.save(Operation(day=day,module=Module.CLOSE,title="Cierre del día",status="Cerrada"));fail("Debe documentar la avería pendiente") }
+        catch(_:IllegalArgumentException){}
+        assertFalse(a.document(day).operations.any{it.module==Module.CLOSE})
+    }
+
 }
