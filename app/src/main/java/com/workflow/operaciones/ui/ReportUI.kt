@@ -50,7 +50,7 @@ internal fun copyReportText(context: Context, text: String) {
     var error by rememberSaveable { mutableStateOf<String?>(null) }
     SafeAlertDialog(onDismissRequest = close, title = { Text("Preparar reporte") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            ReportDropdown("Reporte", type.name, ReportType.entries.filter { it !in listOf(ReportType.TICKET, ReportType.EVENT) }.map { it.name to it.label }) { value -> type = ReportType.valueOf(value!!); status = null }
+            ReportDropdown("Reporte", type.name, ReportType.entries.filter { it !in listOf(ReportType.TICKET, ReportType.EVENT) }.map { it.name to it.label }) { value -> type = ReportType.valueOf(value!!); status = null; operator = null; asset = null }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 TextButton(onClick = { from=vm.day;to=vm.day }) { Text("Día") }
                 TextButton(onClick = { val d=LocalDate.parse(vm.day).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));from=d.toString();to=d.plusDays(6).toString() }) { Text("Semana") }
@@ -63,7 +63,7 @@ internal fun copyReportText(context: Context, text: String) {
             val statuses = when(type) {
                 ReportType.FUEL -> Rules.statuses.getValue(com.workflow.core.Module.FUEL)
                 ReportType.TICKETS,ReportType.OPERATOR_TICKETS -> Rules.statuses.getValue(com.workflow.core.Module.TICKET)
-                ReportType.WORKSHOP,ReportType.ASSET_HISTORY -> Rules.statuses.getValue(com.workflow.core.Module.FAULT)
+                ReportType.WORKSHOP,ReportType.ASSET_HISTORY -> listOf("Sin resolver")+Rules.statuses.getValue(com.workflow.core.Module.FAULT)
                 else -> emptyList()
             }
             if(statuses.isNotEmpty())ReportDropdown("Estado",status,listOf(null to "Todos los estados")+statuses.map{it to it}){status=it}
@@ -104,8 +104,9 @@ internal fun copyReportText(context: Context, text: String) {
         if(pdf==null&&error==null) LinearProgressIndicator(Modifier.fillMaxWidth())
         LazyColumn(Modifier.weight(1f).padding(vertical=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             items(images,key={it.name}) { file ->
-                val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null,file) {
-                    value=withContext(Dispatchers.IO){BitmapFactory.decodeFile(file.absolutePath,BitmapFactory.Options().apply{inSampleSize=2})?.asImageBitmap()}
+                var bitmap by remember(file) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+                LaunchedEffect(file) {
+                    bitmap=withContext(Dispatchers.IO){BitmapFactory.decodeFile(file.absolutePath,BitmapFactory.Options().apply{inSampleSize=2})?.asImageBitmap()}
                 }
                 bitmap?.let{Image(it,contentDescription="Página de ${report.title}",modifier=Modifier.fillMaxWidth().aspectRatio(it.width.toFloat()/it.height))}
             }
@@ -133,7 +134,7 @@ internal fun copyReportText(context: Context, text: String) {
     SafeAlertDialog(onDismissRequest={if(!vm.busy)close()},title={Text("Iniciar jornada")},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text(friendlyDay(vm.day),style=MaterialTheme.typography.titleMedium)
-            Text("Marca las actividades que necesitas hoy. Se añadirán a tu agenda y podrás crear otras después.")
+            Text("Marca las actividades de esta jornada. Se añadirán a tu agenda y podrás crear otras después.")
             DayTemplates.all.forEach { template -> Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
                 Checkbox(template.key in selected,{checked->selected=if(checked)selected+template.key else selected-template.key},enabled=!vm.busy)
                 Text(template.title,Modifier.weight(1f))

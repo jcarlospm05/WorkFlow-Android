@@ -2,21 +2,21 @@
 
 Aplicación nativa de operación diaria, personal, equipos, existencias y agenda. Identidad visual consistente con logo y paleta WorkFlow y tipografía Nunito Sans.
 
-## Revisión 1.1.0 UX
+## Revisión 1.2.0 · Jornadas y reportes
 
 - Instalación sin registros de negocio ni actividades precargadas. Los datos sintéticos solo pertenecen a las pruebas automatizadas.
 - Altas consecutivas sin salir del formulario; código de empleado opcional; catálogos buscables.
 - Indicadores del inicio que abren sus módulos y conservación de navegación y borradores al volver de otra aplicación.
-- Informes protegidos para consultar en otro WorkFlow y documentos PDF para leer. La interfaz no muestra detalles del formato interno o de la base de datos.
+- Jornadas protegidas para cargar y continuar en otro WorkFlow, además de reportes PDF, imágenes JPG y listados de texto para WhatsApp. La interfaz no muestra detalles del formato interno o de la base de datos.
 - Transporte con AES-256-GCM y PBKDF2-HMAC-SHA256; clave acordada por el equipo, almacenada con Android Keystore en cada teléfono. SHA-256 por sí solo no cifra datos.
 
 [Protocolo y límites de seguridad](docs/INFORMES_PROTEGIDOS.md). Ambos teléfonos deben actualizarse para los nuevos informes protegidos; los archivos antiguos sin cifrado deben volver a compartirse.
 
-## Arquitectura
+[Cambios acordados y alcance](docs/CAMBIOS_JORNADAS.md) · [Identidad fija de reportes](docs/reportes/IDENTIDAD_FIJA.md).\n\n## Arquitectura
 
-Kotlin, Jetpack Compose 1.8, Room/SQLite. `core` contiene modelos, reglas de negocio, documento interno, intercambio protegido e importación idempotente. `app/data` mantiene transacciones, historial, archivos atómicos y custodia de claves; `app/ui` presenta formularios, catálogos, informes y agenda; `app/export` genera archivos de intercambio y PDF multipágina y los comparte por WhatsApp o el selector Android.
+Kotlin, Jetpack Compose 1.8, Room/SQLite. `core` contiene modelos, reglas de negocio, documento interno, intercambio protegido e importación idempotente. `app/data` mantiene transacciones, historial, archivos atómicos y custodia de claves; `app/ui` presenta formularios, catálogos, informes y agenda; `app/export` genera archivos de intercambio y PDF/JPG multipágina y los comparte por WhatsApp o el selector Android.
 
-La base de datos es la fuente de verdad. Cada cambio actualiza el documento del día; si falta espacio para una copia privada, el registro permanece guardado. Los informes recibidos no sobrescriben los datos propios. El documento compartido representa el día y no es un respaldo completo de toda la historia ni de la auditoría.
+La base de datos es la fuente de verdad. Cada cambio actualiza el documento del día; si falta espacio para una copia privada, el registro permanece guardado. La fecha recibida se carga como jornada editable. Se detectan versiones anteriores y cambios simultáneos; la sustitución exige revisión y conserva el estado anterior en auditoría. El documento compartido representa el día y no es un respaldo completo de toda la historia ni de la auditoría.
 
 ## Compilación y verificación
 

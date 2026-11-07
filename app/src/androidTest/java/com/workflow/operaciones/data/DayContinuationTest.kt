@@ -95,4 +95,30 @@ class DayContinuationTest {
         try{a.startDay(day,setOf("dinner"));fail("La jornada ya está iniciada")}catch(_:IllegalArgumentException){}
         assertEquals(2,a.document(day).operations.size)
     }
+
+    @Test fun a_preselected_fuel_activity_uses_one_task_and_updates_it_when_abastecido()=runBlocking {
+        val asset=Asset(UUID.randomUUID().toString(),"Equipo de prueba","Grúa")
+        a.addAsset(asset,day);a.startDay(day,setOf("fuel-crane"))
+        val activity=Operation(day=day,module=Module.FUEL,title="Combustible",status="Pendiente",assetId=asset.id)
+        a.save(activity)
+        val task=a.document(day).operations.single{it.module==Module.TASK}
+        assertEquals(activity.id,task.sourceId)
+        a.save(activity.copy(status="Abastecido"))
+        assertEquals("Completada",a.document(day).operations.single{it.module==Module.TASK}.status)
+    }
+    @Test fun an_open_fault_from_an_earlier_day_can_be_resolved_after_handoff()=runBlocking {
+        val asset=Asset(UUID.randomUUID().toString(),"Equipo de prueba","Mula")
+        val yesterday="2026-11-05"
+        a.addAsset(asset,yesterday)
+        val fault=Operation(day=yesterday,module=Module.FAULT,title="Avería anterior",status="Abierta",assetId=asset.id)
+        a.save(fault);a.startDay(day,emptySet())
+        val outgoing=a.document(day)
+        assertEquals(fault.id,outgoing.carryOverFaults.single().id)
+        b.continueDay(outgoing)
+        b.save(b.document(day).carryOverFaults.single().copy(status="Cerrada",notes="Resuelta"))
+        a.continueDay(b.document(day))
+        assertEquals("Activo",a.masters().second.single().state)
+        assertEquals("Cerrada",a.document(day).carryOverFaults.single().status)
+    }
+
 }

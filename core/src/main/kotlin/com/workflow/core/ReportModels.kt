@@ -83,7 +83,7 @@ object ReportBuilder {
             .filter { query.operatorId == null || it.operatorId == query.operatorId || query.operatorId in it.operatorIds }
             .filter { query.assetId == null || it.assetId == query.assetId }
             .filter { query.operationId == null || it.id == query.operationId }
-            .filter { query.status == null || it.status == query.status }
+            .filter { query.status == null || it.status == query.status || (query.status == "Sin resolver" && it.module == Module.FAULT && it.status != "Cerrada") }
             .sortedWith(compareBy({ it.day }, { it.time }, { it.title }))
         fun operator(id: String?) = operators[id]?.name ?: "Sin asignar"
         fun asset(id: String?) = assets[id]?.code ?: "Sin asignar"

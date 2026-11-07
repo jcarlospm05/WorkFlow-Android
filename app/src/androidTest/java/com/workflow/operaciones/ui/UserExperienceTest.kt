@@ -167,7 +167,8 @@ class UserExperienceTest {
         prepare()
         model.repository.transferKeys.clear()
         val own = model.document!!
-        val incoming = DailyCodec.seal(own.copy(originId = UUID.randomUUID().toString(), supervisor = "Supervisora de prueba"))
+        val sender = UUID.randomUUID().toString()
+        val incoming = DailyCodec.seal(own.copy(originId = sender, journeyId = UUID.randomUUID().toString(), versionVector = mapOf(sender to 1L), supervisor = "Supervisora de prueba"))
         val phrase = "Frase del equipo para pruebas"
         val secret = phrase.toCharArray()
         val file = try { Reports.protectedReport(context, incoming, secret) } finally { secret.fill('\u0000') }

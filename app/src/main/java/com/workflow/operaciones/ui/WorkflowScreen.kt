@@ -368,6 +368,11 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                             Module.FUEL -> {
                                 if (doc.assets.isEmpty()) item { Button(onClick = { newMaster("asset") }) { Text("Añadir equipos") } }
                                 val fuel = doc.operations.filter { it.module == Module.FUEL }
+                                item { WFCard(Modifier.fillMaxWidth(), Brand.Sand) {
+                                    Text("Equipos pendientes de combustible", style = MaterialTheme.typography.titleSmall)
+                                    Text("${fuel.count { it.status == "Pendiente" }} equipos con abastecimiento pendiente", style = MaterialTheme.typography.bodyMedium)
+                                    ListReportActions(ReportQuery(ReportType.FUEL, doc.day, status = "Pendiente"), reportDocuments, { reportOptions = it }, { vm.message = it })
+                                } }
                                 item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { MetricTile(fuel.count { it.status == "Abastecido" }.toString(), "Abastecidos", Icons.Outlined.CheckCircle, Brand.Sage, Modifier.weight(1f)); MetricTile(fuel.count { it.status == "Pendiente" }.toString(), "Pendientes", Icons.Outlined.Schedule, Brand.Sand, Modifier.weight(1f)) } }
                                 items(doc.assets, key = { it.id }) { asset ->
                                     val op = fuel.lastOrNull { it.assetId == asset.id }
@@ -383,6 +388,10 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                                 val rows = (doc.operations + if (selectedModule == Module.FAULT) doc.carryOverFaults else emptyList()).filter { it.module == selectedModule }
                                 if (selectedModule == Module.PLAN) item { WeekStrip(doc.day, vm::chooseDay) }
                                 if (selectedModule == Module.FAULT) item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { MetricTile(rows.count { it.status == "Abierta" }.toString(), "Abiertas", Icons.Outlined.Build, Brand.Sand, Modifier.weight(1f)); MetricTile(rows.count { it.status == "Cerrada" }.toString(), "Resueltas", Icons.Outlined.CheckCircle, Brand.Sage, Modifier.weight(1f)) } }
+                                if (selectedModule == Module.FAULT) item { WFCard(Modifier.fillMaxWidth(), Brand.Sand) {
+                                    Text("Equipos en taller sin resolver", style = MaterialTheme.typography.titleSmall)
+                                    ListReportActions(ReportQuery(ReportType.WORKSHOP, doc.day, status = "Sin resolver"), reportDocuments, { reportOptions = it }, { vm.message = it })
+                                } }
                                 if (selectedModule == Module.TICKET) item { WFCard(Modifier.fillMaxWidth(), Brand.Sand) { Text("${rows.count { it.status == "Emitido" }} tickets emitidos", style = MaterialTheme.typography.titleMedium); Text("Registro formal y seguimiento por operador.", style = MaterialTheme.typography.bodyMedium) } }
                                 if (rows.isEmpty()) item { Text("Sin registros para esta fecha. Pulsa Registrar para añadir uno.", color = Brand.SecondaryText) }
                                 items(rows, key = { it.id }) { op -> OperationCard(op, doc, report = ::openEvent) { openOperation(op) } }

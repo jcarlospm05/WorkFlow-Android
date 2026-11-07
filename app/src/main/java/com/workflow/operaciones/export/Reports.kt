@@ -55,7 +55,11 @@ object Reports {
     private fun launchShare(context: Context, send: Intent, whatsapp: Boolean) {
         val pkg = listOf("com.whatsapp", "com.whatsapp.w4b").firstOrNull { name -> runCatching { context.packageManager.getPackageInfo(name,0) }.isSuccess }
         val launch = if (whatsapp && pkg!=null) send.setPackage(pkg) else Intent.createChooser(send,"Compartir WorkFlow")
-        context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try { context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        catch (_: android.content.ActivityNotFoundException) {
+            try { context.startActivity(Intent.createChooser(send.setPackage(null), "Compartir WorkFlow").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (_: android.content.ActivityNotFoundException) { android.widget.Toast.makeText(context, "No hay una aplicación disponible para compartir este archivo", android.widget.Toast.LENGTH_LONG).show() }
+        }
     }
     fun share(context: Context, file: File, whatsapp: Boolean) = share(context,listOf(file),whatsapp)
     fun share(context: Context, files: List<File>, whatsapp: Boolean) {

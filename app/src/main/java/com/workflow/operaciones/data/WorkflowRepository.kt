@@ -127,7 +127,7 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
     private suspend fun updateTemplateProgress(day: String) {
         val operations = dao.operations(day).map { json.decodeFromString<Operation>(it.payload) }
         val assets = loadMasters().second.associateBy { it.id }
-        operations.filter { it.module == Module.TASK && it.templateKey in listOf("dinner", "lunch", "fuel-crane", "fuel-mule") }.forEach { task ->
+        operations.filter { it.module == Module.TASK && it.sourceId == null && it.templateKey in listOf("dinner", "lunch", "fuel-crane", "fuel-mule") }.forEach { task ->
             val activities = operations.filter { op -> when (task.templateKey) {
                 "dinner" -> op.module == Module.MEAL && op.mealType == "Cena"
                 "lunch" -> op.module == Module.MEAL && op.mealType == "Almuerzo"
@@ -216,13 +216,16 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
             val activeAtDay = related.any { it.day <= day && (it.status != "Cerrada" || (it.resolvedAt.isNotBlank() && resolutionDay(it) > day)) }
             asset.copy(state = if (activeAtDay) "Inactivo temporal" else if (asset.state == "Inactivo temporal" && related.isNotEmpty()) "Activo" else asset.state)
         }
-        val doc = DailyCodec.seal(DailyDocument(originId = origin, supervisor = supervisorOverride ?: source?.supervisor ?: supervisor, day = day,
+        var doc = DailyCodec.seal(DailyDocument(originId = origin, supervisor = supervisorOverride ?: source?.supervisor ?: supervisor, day = day,
             revision = maxOf(previous?.revision ?: 0, imported?.revision ?: 0) + 1, operators = operators, assets = dayAssets, items = items,
             operations = all.filter { it.day == day }, stockBalances = balances(day, items, all),
             journeyId = source?.let(ContinuationPolicy::identity) ?: UUID.randomUUID().toString(),
             versionVector = if (imported != null) ContinuationPolicy.vector(imported) else ContinuationPolicy.nextVector(previous, origin),
             startedAt = startedAt ?: source?.startedAt.orEmpty(), stockOpeningBalances = balances(day, items, all, before = true),
             carryOverFaults = faults.filter { it.day < day && (it.status != "Cerrada" || (it.resolvedAt.isNotBlank() && resolutionDay(it) >= day)) }))
+        if (imported != null && !ContinuationPolicy.sameContent(doc, imported)) {
+            doc = DailyCodec.seal(doc.copy(versionVector = ContinuationPolicy.nextVector(imported, origin)))
+        }
         val bytes = DailyCodec.encode(doc) // Fail/rollback before commit if the package exceeds its limit.
         dao.putDocument(DocumentRow(day, doc.revision, bytes.toString(Charsets.UTF_8)))
         return doc
@@ -309,10 +312,10 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
                 dao.putReceived(ReceivedRow(doc.originId, doc.day, doc.revision, payload, Instant.now().toString()))
                 val current = regenerate(doc.day, imported = doc)
                 // Later days must reflect any imported stock movements as well.
-                dao.documents().filter { it.day > doc.day || doc.carryOverFaults.any { fault -> fault.day == it.day } }.forEach { regenerate(it.day) }
-                current
+                val refreshed = dao.documents().filter { it.day > doc.day || doc.carryOverFaults.any { fault -> fault.day == it.day } }.map { regenerate(it.day) }
+                listOf(current) + refreshed
             }
-            result?.let(::materialize)
+            result?.forEach(::materialize)
             decision
         }
     }

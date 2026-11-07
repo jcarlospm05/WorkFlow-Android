@@ -82,4 +82,28 @@ class JourneyAndReportsTest {
         }
         assertTrue(d.operations.isEmpty());assertTrue(d.operators.isEmpty())
     }
+
+    @Test fun selected_template_is_bound_to_the_activity_without_an_extra_task() {
+        val asset=Asset(UUID.randomUUID().toString(),"Equipo","Grúa")
+        val preset=DayTemplates.operations("2026-11-06",setOf("fuel-crane")).single()
+        val activity=Operation(day=preset.day,module=Module.FUEL,title="Combustible",status="Pendiente",assetId=asset.id)
+        val linked=LinkedTasks.forOperation(activity,listOf(preset),asset)!!
+        assertEquals(preset.id,linked.id);assertEquals(activity.id,linked.sourceId);assertEquals("fuel-crane",linked.templateKey)
+    }
+    @Test fun copied_empty_day_is_idempotent_and_open_faults_keep_the_original_date() {
+        val asset=Asset(UUID.randomUUID().toString(),"Equipo","Mula")
+        val fault=Operation(day="2026-11-05",module=Module.FAULT,title="Seguimiento",status="Abierta",assetId=asset.id)
+        val d=DailyCodec.seal(document(ops=emptyList(),assets=listOf(asset)).copy(startedAt="",carryOverFaults=listOf(fault)))
+        val restored=DailyCodec.decode(DailyCodec.encode(d))
+        assertEquals(listOf(fault),restored.carryOverFaults)
+        assertEquals(ContinuationDecision.ALREADY_LOADED,ContinuationPolicy.decide(d,restored))
+        assertFails { DailyCodec.encode(d.copy(carryOverFaults=listOf(fault.copy(day="2026-11-07")))) }
+    }
+
+
+    @Test fun same_causal_version_with_different_business_content_is_a_conflict() {
+        val d=document()
+        assertEquals(ContinuationDecision.CONFLICT,ContinuationPolicy.decide(d,d.copy(supervisor="Cambio sin versión")))
+        assertEquals(ContinuationDecision.ALREADY_LOADED,ContinuationPolicy.decide(d,d.copy(originId=b,revision=9,generatedAt="2026-11-07T12:00:00Z")))
+    }
 }

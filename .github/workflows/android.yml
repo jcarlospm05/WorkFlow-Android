@@ -24,7 +24,10 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Compilar, comprobar y ejecutar pruebas
-        run: gradle :core:test :app:lintDebug :app:assembleDebug --stacktrace
+        run: |
+          python3 tools/check_project.py
+          gradle :core:test :app:lintDebug :app:assembleDebug --stacktrace
+          python3 tools/verify_apk.py app/build/outputs/apk/debug/app-debug.apk
       - name: Conservar diagnósticos
         if: always()
         uses: actions/upload-artifact@v4
