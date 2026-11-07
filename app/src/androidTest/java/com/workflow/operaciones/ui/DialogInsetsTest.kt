@@ -139,7 +139,7 @@ class DialogInsetsTest {
                 val repo = (context.applicationContext as WorkflowApp).repository
                 lateinit var model: WorkflowViewModel
                 val open = mutableStateOf(true)
-                val original = Operation(day = LocalDate.now().toString(), module = Module.TASK, title = "Prueba de controles", status = "Pendiente")
+                val original = Operation(time = "09:00", day = LocalDate.now().toString(), module = Module.TASK, title = "Prueba de controles", status = "Pendiente")
                 compose.activityRule.scenario.onActivity { model = WorkflowViewModel(repo); model.shareAfterSave = false }
                 compose.waitUntil(30_000) { !model.busy && model.document != null }
                 show { if (open.value) OperationEditor(original, model) { open.value = false } else Text("Formulario cerrado") }

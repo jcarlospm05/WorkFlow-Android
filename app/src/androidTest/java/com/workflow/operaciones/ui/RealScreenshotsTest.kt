@@ -42,7 +42,8 @@ class RealScreenshotsTest {
     private val day get() = LocalDate.now().toString()
 
     @Test fun captureRealScreensAndLogo() {
-        val repository = (context.applicationContext as WorkflowApp).repository
+        val database = androidx.room.Room.inMemoryDatabaseBuilder(context,com.workflow.operaciones.data.WorkflowDatabase::class.java).build()
+        val repository = com.workflow.operaciones.data.WorkflowRepository(context,database,com.workflow.operaciones.data.TestAgendaAccess())
         runBlocking {
             repository.document(day)
             repository.setSupervisor("Carlos Medina", day)
@@ -59,9 +60,9 @@ class RealScreenshotsTest {
             listOf(12.0, 36.0, 4.0).forEachIndexed { i, amount -> repository.save(Operation(id = id("stock-$i"), day = day, module = Module.STOCK, title = "Existencia inicial · demostración", status = "Entrada", itemId = stock[i].id, quantity = amount, time = "07:00")) }
             repository.save(Operation(id = id("a1"), day = day, module = Module.ATTENDANCE, title = "Asistencia de mañana", status = "Presente", operatorId = operators[0].id, time = "07:00"))
             repository.save(Operation(id = id("a2"), day = day, module = Module.ATTENDANCE, title = "Asistencia de tarde", status = "Tardanza", operatorId = operators[1].id, shift = "Tarde", time = "15:10", extended = true))
-            repository.save(Operation(id = id("a3"), day = day, module = Module.ATTENDANCE, title = "Libre compensatorio", status = "Libre", operatorId = operators[2].id, shift = "Noche"))
+            repository.save(Operation(time = "09:00", id = id("a3"), day = day, module = Module.ATTENDANCE, title = "Libre compensatorio", status = "Libre", operatorId = operators[2].id, shift = "Noche"))
             repository.save(Operation(id = id("cena"), day = day, module = Module.MEAL, title = "Solicitud de cena", status = "Solicitada", operatorIds = operators.take(2).map { it.id }, time = "10:45"))
-            repository.save(Operation(id = id("fuel1"), day = day, module = Module.FUEL, title = "Abastecimiento pendiente", status = "Pendiente", assetId = assets[0].id, operatorId = operators[0].id))
+            repository.save(Operation(time = "09:00", id = id("fuel1"), day = day, module = Module.FUEL, title = "Abastecimiento pendiente", status = "Pendiente", assetId = assets[0].id, operatorId = operators[0].id))
             repository.save(Operation(id = id("fuel2"), day = day, module = Module.FUEL, title = "Combustible confirmado", status = "Abastecido", assetId = assets[1].id, quantity = 40.0, time = "08:45"))
             repository.save(Operation(id = id("fault"), day = day, module = Module.FAULT, title = "Fallo de arranque", status = "Abierta", assetId = assets[2].id, time = "09:20", notes = "Equipo en taller. Datos de demostración."))
             repository.save(Operation(id = id("ticket"), day = day, module = Module.TICKET, title = "Imprudencia operativa", status = "Emitido", operatorId = operators[1].id, time = "09:30", notes = "Registro sintético para demostración visual."))
@@ -95,6 +96,7 @@ class RealScreenshotsTest {
         nav("Operación"); module("Infracciones"); capture("09-infracciones")
         nav("Reportes"); capture("10-reportes")
         nav("Más"); capture("11-configuracion")
+        database.close()
 
     }
     private fun nav(label: String) {

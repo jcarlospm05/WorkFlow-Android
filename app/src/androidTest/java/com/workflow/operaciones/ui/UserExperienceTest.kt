@@ -40,7 +40,7 @@ class UserExperienceTest {
     private lateinit var model: WorkflowViewModel
     private fun prepare() {
         db = Room.inMemoryDatabaseBuilder(context, WorkflowDatabase::class.java).build()
-        compose.activityRule.scenario.onActivity { model = WorkflowViewModel(WorkflowRepository(context, db)); model.shareAfterSave = false }
+        compose.activityRule.scenario.onActivity { model = WorkflowViewModel(WorkflowRepository(context, db, com.workflow.operaciones.data.TestAgendaAccess())); model.shareAfterSave = false }
         compose.waitUntil(60_000) { !model.busy && model.document != null }
     }
     private fun show(content: @Composable () -> Unit) {
@@ -128,7 +128,7 @@ class UserExperienceTest {
         prepare()
         compose.runOnIdle { model.shareAfterSave = true }
         val open = mutableStateOf(true)
-        val draft = Operation(day = model.day, module = Module.TASK, title = "Primera actividad", status = "Pendiente")
+        val draft = Operation(time = "09:00", day = model.day, module = Module.TASK, title = "Primera actividad", status = "Pendiente")
         show { if (open.value) OperationEditor(draft, model) { open.value = false } }
         tap("dialog-save-another")
         compose.waitUntil(30_000) { !model.busy && model.document!!.operations.any { it.title == "Primera actividad" } }
@@ -212,7 +212,7 @@ class UserExperienceTest {
 
     @Test fun an_open_editor_keeps_newer_received_record_data_intact() {
         prepare()
-        compose.runOnIdle { model.save(Operation(day=model.day,module=Module.TASK,title="Primera versión",status="Pendiente"),offerShare=false){} }
+        compose.runOnIdle { model.save(Operation(time = "09:00", day=model.day,module=Module.TASK,title="Primera versión",status="Pendiente"),offerShare=false){} }
         compose.waitUntil(30_000){!model.busy&&model.document!!.operations.isNotEmpty()}
         val original=model.document!!.operations.single()
         val open=mutableStateOf(true)

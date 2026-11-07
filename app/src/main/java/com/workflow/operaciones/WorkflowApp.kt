@@ -11,11 +11,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import com.workflow.operaciones.data.WorkflowDatabase
 import com.workflow.operaciones.data.WorkflowRepository
+import com.workflow.operaciones.reminders.AgendaScheduler
 
 class WorkflowApp : Application() {
-    val repository by lazy { WorkflowRepository(this, WorkflowDatabase.open(this)) }
+    val agendaScheduler by lazy { AgendaScheduler(this) { repository.history() } }
+    val repository by lazy { WorkflowRepository(this, WorkflowDatabase.open(this)).also { it.onChanged = { agendaScheduler.requestReconcile() } } }
     override fun onCreate() {
         super.onCreate()
+        AgendaScheduler.createChannel(this)
+        agendaScheduler.requestReconcile()
         ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {

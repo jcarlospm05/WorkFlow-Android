@@ -131,6 +131,11 @@ internal fun copyReportText(context: Context, text: String) {
 
 @Composable internal fun StartDayDialog(vm: WorkflowViewModel, close: () -> Unit) {
     var selected by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var times by rememberSaveable { mutableStateOf(emptyMap<String,String>()) }
+    var settings by rememberSaveable { mutableStateOf(false) }
+    val defaults=vm.repository.agendaAccess.defaultTime()
+    val unscheduled=vm.document?.operations.orEmpty().filter { it.module==com.workflow.core.Module.TASK && it.status=="Pendiente" && !AgendaTime.valid(it.time) }
+    val blockers=DayControl.blockers(vm.history,vm.day)
     SafeAlertDialog(onDismissRequest={if(!vm.busy)close()},title={Text("Iniciar jornada")},text={
         Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text(friendlyDay(vm.day),style=MaterialTheme.typography.titleMedium)
@@ -139,8 +144,15 @@ internal fun copyReportText(context: Context, text: String) {
                 Checkbox(template.key in selected,{checked->selected=if(checked)selected+template.key else selected-template.key},enabled=!vm.busy)
                 Text(template.title,Modifier.weight(1f))
             } }
+            DayTemplates.all.filter{it.key in selected}.forEach { task ->
+                OutlinedTextField(times[task.key]?:defaults,{times=times+(task.key to it)},label={Text("${task.title} · HH:mm")},modifier=Modifier.fillMaxWidth(),singleLine=true)
+            }
+            unscheduled.forEach { task -> OutlinedTextField(times[task.id]?:defaults,{times=times+(task.id to it)},label={Text("${task.title} · HH:mm")},modifier=Modifier.fillMaxWidth(),singleLine=true) }
+            TextButton(onClick={settings=true}){Text("Configurar alarmas, sonido y vibración")}
+            if(blockers.isNotEmpty())Text("Primero termina las tareas y cierra las jornadas anteriores.",color=Brand.Red)
             Text("${selected.size} tareas seleccionadas",color=Brand.SecondaryText)
             vm.actionError?.let{Text(it,color=Brand.Red)}
         }
-    },confirmButton={TextButton(onClick={vm.startDay(selected,close)},enabled=!vm.busy,modifier=Modifier.testTag("start-day-confirm")){Text("Iniciar jornada")}},dismissButton={TextButton(onClick=close,enabled=!vm.busy){Text("Cancelar")}})
+    },confirmButton={TextButton(onClick={vm.startDay(selected, times + (DayTemplates.all.filter{it.key in selected}.associate{it.key to (times[it.key]?:defaults)}) + unscheduled.associate{it.id to (times[it.id]?:defaults)},close)},enabled=!vm.busy&&blockers.isEmpty(),modifier=Modifier.testTag("start-day-confirm")){Text("Iniciar jornada")}},dismissButton={TextButton(onClick=close,enabled=!vm.busy){Text("Cancelar")}})
+    if(settings)AgendaSettingsDialog(vm){settings=false}
 }

@@ -34,6 +34,7 @@ class MainActivity : FragmentActivity() {
     private var attempted = false
     private var unlockError by mutableStateOf<String?>(null)
     private var inbound by mutableStateOf<Uri?>(null)
+    private var alarmDay by mutableStateOf<String?>(null)
     private lateinit var model: WorkflowViewModel
     private val credentialLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         promptActive = false
@@ -55,6 +56,7 @@ class MainActivity : FragmentActivity() {
             WorkflowTheme {
                 val screenState = rememberSaveableStateHolder()
                 if (unlocked) {
+                    LaunchedEffect(alarmDay,model.busy){if(!model.busy)alarmDay?.let{model.openAgendaDay(it);alarmDay=null}}
                     LaunchedEffect(inbound, model.busy) { if (!model.busy) inbound?.let { model.preview(it); inbound = null } }
                     screenState.SaveableStateProvider("workflow") { WorkflowScreen(model) }
                 } else Surface(color = Brand.Background, modifier = Modifier.fillMaxSize()) {
@@ -105,6 +107,7 @@ class MainActivity : FragmentActivity() {
     }
     override fun onResume() {
         super.onResume()
+        (application as WorkflowApp).agendaScheduler.requestReconcile()
         if (getSystemService(KeyguardManager::class.java).isDeviceLocked) unlocked = false
         window.decorView.post { if (!unlocked) unlock() }
     }
@@ -112,6 +115,9 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); capture(intent) }
     @Suppress("DEPRECATION")
     private fun capture(intent: Intent?) {
+        if(intent?.action==com.workflow.operaciones.reminders.AgendaScheduler.OPEN) {
+            intent.getStringExtra("day")?.let { value -> runCatching { com.workflow.core.Rules.day(value) }.onSuccess { alarmDay=value } }
+        }
         val uri = when (intent?.action) { Intent.ACTION_VIEW -> intent.data; Intent.ACTION_SEND -> intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM); else -> null }
         if (uri?.scheme == "content") inbound = uri
     }

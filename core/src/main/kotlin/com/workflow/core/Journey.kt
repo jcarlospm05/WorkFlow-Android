@@ -80,6 +80,6 @@ object LinkedTasks {
             else -> op.status in listOf("Libre confirmado", "Libre disfrutado")
         }
         return (previous ?: Operation(day = op.day, module = Module.TASK, title = title, status = "Pendiente", sourceId = op.id))
-            .copy(sourceId = op.id, title = title, status = if (completed) "Completada" else "Pendiente", time = op.time, assetId = op.assetId, operatorId = op.operatorId, updatedAt = op.updatedAt)
+            .copy(sourceId = op.id, title = title, status = if (completed) "Completada" else "Pendiente", time = op.time.ifBlank { previous?.time.orEmpty() }, assetId = op.assetId, operatorId = op.operatorId, updatedAt = op.updatedAt)
     }
 }

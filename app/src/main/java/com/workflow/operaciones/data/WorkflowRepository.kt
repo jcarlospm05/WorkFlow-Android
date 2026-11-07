@@ -14,8 +14,11 @@ import kotlinx.serialization.encodeToString
 import java.io.File
 import java.time.Instant
 import java.util.UUID
+import com.workflow.operaciones.reminders.AgendaAccess
+import com.workflow.operaciones.reminders.AndroidAgendaAccess
 
-class WorkflowRepository(private val context: Context, private val db: WorkflowDatabase) {
+class WorkflowRepository(private val context: Context, private val db: WorkflowDatabase, val agendaAccess: AgendaAccess = AndroidAgendaAccess(context)) {
+    var onChanged: (() -> Unit)? = null
     val transferKeys = TransferKeyStore(context)
     private val dao = db.dao()
     private val mutex = Mutex()
@@ -91,6 +94,13 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
                 }
                 require(old == null || old.day == value.day) { "No se puede mover un registro a otra fecha" }
                 val sameDay = dao.operations(value.day).map { json.decodeFromString<Operation>(it.payload) }
+                if (value.module == Module.TASK && value.status == "Pendiente") AgendaTime.requireTime(value.time)
+                val resolving = old != null && ((value.module == Module.TASK && value.status == "Completada") || (value.module == Module.FAULT && value.status == "Cerrada"))
+                if (DayControl.isExecution(value) && !resolving) {
+                    DayControl.requirePreviousFinished(dao.documents().map(::decodeDocument), value.day)
+                    agendaAccess.requireReady()
+                    require(sameDay.none { it.module == Module.TASK && it.status == "Pendiente" && !AgendaTime.valid(it.time) }) { "Asigna una hora de alarma a las tareas pendientes de esta jornada antes de continuar sus operaciones." }
+                }
                 val closed = sameDay.any { it.module == Module.CLOSE && it.status == "Cerrada" }
                 val resolvingEarlierFault = value.module == Module.FAULT && value.status == "Cerrada" && old != null && value.day < java.time.LocalDate.now().toString()
                 require(!closed || resolvingEarlierFault || (value.module == Module.CLOSE && value.status == "Reabierta")) { "Reabre la jornada antes de corregirla" }
@@ -118,15 +128,21 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
                 validateStockHistory(items)
                 dao.audit(AuditRow(at = normalized.updatedAt, action = if (previous == null) "CREATE" else "UPDATE", recordId = normalized.id, before = previous?.payload, after = payload))
                 val affectedDays = if (value.module in listOf(Module.STOCK, Module.FAULT)) (dao.documents().filter { it.day >= value.day }.map { it.day } + value.day).distinct() else listOf(value.day)
-                affectedDays.map { if (value.module == Module.FAULT) ensureWorkshopTask(it, reopen = value.status != "Cerrada"); regenerate(it) }
+                affectedDays.map {
+                    if (value.module == Module.FAULT) ensureWorkshopTask(it, reopen = value.status != "Cerrada")
+                    val markStarted = it == value.day && DayControl.isExecution(value) && dao.document(it)?.let(::decodeDocument)?.startedAt.isNullOrBlank()
+                    regenerate(it, startedAt = if (markStarted) Instant.now().toString() else null)
+                }
             }
             docs.forEach(::materialize)
         }
     }
     private suspend fun putAutomaticTask(task: Operation) {
         val before = dao.operation(task.id)
-        val payload = json.encodeToString(task)
-        dao.putOperation(OperationRow(task.id, task.day, task.module.name, task.naturalKey(), payload))
+        val prepared = if (task.status == "Pendiente") task.copy(time = task.time.ifBlank { before?.let { json.decodeFromString<Operation>(it.payload).time }.orEmpty().ifBlank { agendaAccess.defaultTime() } }) else task
+        if (prepared.status == "Pendiente") AgendaTime.requireTime(prepared.time)
+        val payload = json.encodeToString(prepared)
+        dao.putOperation(OperationRow(prepared.id, prepared.day, prepared.module.name, prepared.naturalKey(), payload))
         dao.audit(AuditRow(at = Instant.now().toString(), action = "LINKED_TASK", recordId = task.id, before = before?.payload, after = payload))
     }
     private suspend fun updateTemplateProgress(day: String) {
@@ -172,14 +188,21 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
             }
         }
     }
-    suspend fun startDay(day: String, selected: Set<String>) = withContext(Dispatchers.IO) {
+    suspend fun startDay(day: String, selected: Set<String>, times: Map<String, String> = emptyMap()) = withContext(Dispatchers.IO) {
         mutex.withLock {
             val doc = db.withTransaction {
+                agendaAccess.requireReady()
+                DayControl.requirePreviousFinished(dao.documents().map(::decodeDocument), day)
                 val previous = dao.document(day)?.let(::decodeDocument)
                 require(previous?.startedAt.isNullOrEmpty()) { "La jornada ya está iniciada" }
                 val existing = dao.operations(day).map { json.decodeFromString<Operation>(it.payload) }
                 require(existing.none { it.module == Module.CLOSE && it.status == "Cerrada" }) { "Reabre el día antes de iniciar sus actividades" }
-                DayTemplates.operations(day, selected).filter { task -> existing.none { it.templateKey == task.templateKey } }.forEach { putAutomaticTask(it) }
+                existing.filter { it.module == Module.TASK && it.status == "Pendiente" }.forEach { task ->
+                    val time = times[task.id] ?: task.time
+                    AgendaTime.requireTime(time)
+                    if (time != task.time) putAutomaticTask(task.copy(time = time, updatedAt = Instant.now().toString()))
+                }
+                DayTemplates.operations(day, selected).filter { task -> existing.none { it.templateKey == task.templateKey } }.forEach { putAutomaticTask(it.copy(time = times[it.templateKey] ?: agendaAccess.defaultTime())) }
                 ensureWorkshopTask(day)
                 regenerate(day, startedAt = Instant.now().toString())
             }
@@ -247,6 +270,7 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
         } catch (_: java.io.IOException) {
             fileWarning = "El registro está guardado. Libera espacio para actualizar su copia de respaldo; no necesitas registrarlo otra vez."
         }
+        onChanged?.invoke()
     }
     suspend fun readSharedReport(uri: Uri): ByteArray = withContext(Dispatchers.IO) {
         require(uri.scheme == "content") { "Selecciona un archivo mediante Android" }
@@ -289,6 +313,10 @@ class WorkflowRepository(private val context: Context, private val db: WorkflowD
             var decision = ContinuationDecision.LOAD
             val result = db.withTransaction {
                 val old = dao.document(doc.day)?.let(::decodeDocument)
+                if (DayControl.started(doc)) {
+                    DayControl.requirePreviousFinished(dao.documents().map(::decodeDocument), doc.day)
+                    agendaAccess.requireReady()
+                }
                 decision = old?.let { ContinuationPolicy.decide(it, doc) } ?: ContinuationDecision.LOAD
                 if (decision == ContinuationDecision.ALREADY_LOADED) return@withTransaction null
                 require(replaceConflict || decision !in listOf(ContinuationDecision.CONFLICT, ContinuationDecision.OLDER)) { "La jornada tiene cambios distintos o más recientes. Revisa ambas versiones antes de sustituirla." }

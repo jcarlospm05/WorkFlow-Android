@@ -16,7 +16,7 @@ import java.util.UUID
 class RepositoryTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val db = Room.inMemoryDatabaseBuilder(context, WorkflowDatabase::class.java).build()
-    private val repository = WorkflowRepository(context, db)
+    private val repository = WorkflowRepository(context, db, com.workflow.operaciones.data.TestAgendaAccess())
     private val day = "2026-11-05"
     @After fun close() { db.close() }
     @Test fun fresh_install_has_no_preloaded_business_records() = runBlocking {
@@ -48,7 +48,7 @@ class RepositoryTest {
         val operator = Operator(UUID.randomUUID().toString(), "TEST", "Operador sintético")
         repository.addOperator(operator, day)
         val before = repository.document(day)
-        val op = Operation(day = day, module = Module.ATTENDANCE, title = "Asistencia", status = "Presente", operatorId = operator.id)
+        val op = Operation(time = "09:00", day = day, module = Module.ATTENDANCE, title = "Asistencia", status = "Presente", operatorId = operator.id)
         repository.save(op)
         repository.save(op.copy(id = UUID.randomUUID().toString(), status = "Tardanza"))
         val after = repository.document(day)
@@ -62,7 +62,7 @@ class RepositoryTest {
         repository.addItem(item, day)
         val before = repository.document(day)
         try {
-            repository.save(Operation(day = day, module = Module.STOCK, title = "Salida", status = "Salida", itemId = item.id, quantity = 3.0))
+            repository.save(Operation(time = "09:00", day = day, module = Module.STOCK, title = "Salida", status = "Salida", itemId = item.id, quantity = 3.0))
             fail("La salida debió rechazarse")
         } catch (_: IllegalArgumentException) { }
         assertEquals(before, repository.document(day))
@@ -77,13 +77,13 @@ class RepositoryTest {
     }
     @Test fun closed_day_requires_reopening_before_changes() = runBlocking {
         repository.document(day)
-        repository.save(Operation(day = day, module = Module.CLOSE, title = "Cierre", status = "Cerrada", notes = "Se conservan los pendientes sintéticos de prueba"))
+        repository.save(Operation(time = "09:00", day = day, module = Module.CLOSE, title = "Cierre", status = "Cerrada", notes = "Se conservan los pendientes sintéticos de prueba"))
         try {
-            repository.save(Operation(day = day, module = Module.TASK, title = "Cambio", status = "Pendiente"))
+            repository.save(Operation(time = "09:00", day = day, module = Module.TASK, title = "Cambio", status = "Pendiente"))
             fail("No debe permitir cambios")
         } catch (_: IllegalArgumentException) { }
-        repository.save(Operation(day = day, module = Module.CLOSE, title = "Reapertura", status = "Reabierta"))
-        repository.save(Operation(day = day, module = Module.TASK, title = "Cambio", status = "Pendiente"))
+        repository.save(Operation(time = "09:00", day = day, module = Module.CLOSE, title = "Reapertura", status = "Reabierta"))
+        repository.save(Operation(time = "09:00", day = day, module = Module.TASK, title = "Cambio", status = "Pendiente"))
         assertTrue(repository.document(day).operations.any { it.title == "Cambio" })
     }
 }

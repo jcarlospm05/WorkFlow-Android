@@ -31,6 +31,8 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
     fun setOfferShare(value: Boolean) { repository.shareAfterSave = value; shareAfterSave = value }
     var incomingDecision by mutableStateOf<ContinuationDecision?>(null); private set
     var loadedDayEvent by mutableIntStateOf(0); private set
+    var agendaNavigationEvent by mutableIntStateOf(0); private set
+    fun openAgendaDay(value: String) = action { Rules.day(value);day=value;reload();agendaNavigationEvent++ }
     var hasTransferKey by mutableStateOf(false); private set
     var needsTransferSetup by mutableStateOf(false); private set
     var transferKeyError by mutableStateOf<String?>(null); private set
@@ -68,7 +70,7 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
     fun refresh() = action { reload() }
     fun clearActionError() { actionError = null }
     fun chooseDay(value: String) = action { Rules.day(value); day = value; reload() }
-    fun startDay(selected: Set<String>, done: () -> Unit) = action { repository.startDay(day, selected); reload(); message = "Jornada iniciada. Tus actividades están en la agenda."; done() }
+    fun startDay(selected: Set<String>, times: Map<String,String> = emptyMap(), done: () -> Unit) = action { repository.startDay(day, selected, times); reload(); message = "Jornada iniciada. Tus actividades están en la agenda."; done() }
     fun save(op: Operation, offerShare: Boolean = true, expectedUpdatedAt: String? = null, done: () -> Unit) = action {
         repository.save(op, expectedUpdatedAt); reload(); done()
         message = repository.fileWarning ?: "Registro guardado. Tu informe del día está actualizado."

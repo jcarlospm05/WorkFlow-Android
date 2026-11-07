@@ -33,7 +33,7 @@ class DatabaseMigrationTest {
         }
         val db=Room.databaseBuilder(context,WorkflowDatabase::class.java,name).addMigrations(WorkflowDatabase.MIGRATION_1_2).build()
         try {
-            val repository=WorkflowRepository(context,db)
+            val repository=WorkflowRepository(context,db,com.workflow.operaciones.data.TestAgendaAccess())
             assertEquals(person,repository.masters().first.single())
             assertEquals(person,repository.document("2026-11-06").operators.single())
             assertEquals(2,db.openHelper.writableDatabase.version)

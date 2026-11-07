@@ -111,6 +111,8 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
     var masterDraftKey by rememberSaveable { mutableStateOf("") }
     val formState = rememberSaveableStateHolder()
     var startDay by rememberSaveable { mutableStateOf(false) }
+    var alarmSettings by rememberSaveable { mutableStateOf(false) }
+    val unfinishedDays=DayControl.blockers(vm.history,vm.day)
     var reportOptions by rememberSaveable(stateSaver = formSaver<ReportQuery>()) { mutableStateOf<ReportQuery?>(null) }
     var visualReport by rememberSaveable(stateSaver = formSaver<ReportQuery>()) { mutableStateOf<ReportQuery?>(null) }
     val reportDocuments = (vm.history + listOfNotNull(vm.document)).associateBy { it.day }.values.toList()
@@ -131,6 +133,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(vm.message) { vm.message?.let { snackbar.showSnackbar(it); vm.message = null } }
     LaunchedEffect(vm.loadedDayEvent) { if (vm.loadedDayEvent > 0) { tab = 0; module = null; catalog = null; formVisible = false } }
+    LaunchedEffect(vm.agendaNavigationEvent) { if(vm.agendaNavigationEvent>0){tab=1;module=null;catalog=null;formVisible=false;pendingOverview=false} }
     val screenScroll = rememberSaveable(tab, module, catalog, pendingOverview, vm.day, saver = LazyListState.Saver) { LazyListState() }
     BackHandler(enabled = formVisible || tab != 0 || module != null || catalog != null || pendingOverview) {
         when { formVisible -> formVisible = false; catalog != null -> catalog = null; module != null -> module = null; pendingOverview -> pendingOverview = false; else -> tab = 0 }
@@ -198,6 +201,22 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
             state = screenScroll,
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if(unfinishedDays.isNotEmpty())item {
+                WFCard(Modifier.fillMaxWidth(),Brand.Sand) {
+                    Text("Hay jornadas anteriores pendientes",style=MaterialTheme.typography.titleSmall)
+                    unfinishedDays.forEach { previous ->
+                        Text("${previous.day} · ${previous.tasks.size} tareas pendientes · ${if(previous.closed) "Día cerrado" else "Falta cerrar el día"}")
+                        TextButton(onClick={vm.openAgendaDay(previous.day)}){Text("Resolver jornada del ${previous.day}")}
+                    }
+                    Text("Puedes consultar y preparar fechas futuras. Para iniciar sus operaciones debes terminar las jornadas anteriores.",style=MaterialTheme.typography.bodyMedium)
+                }
+            }
+            val missingAlarmTimes = doc.operations.filter { it.module == Module.TASK && it.status == "Pendiente" && !AgendaTime.valid(it.time) }
+            if(missingAlarmTimes.isNotEmpty())item { WFCard(Modifier.fillMaxWidth(),Brand.Sand) {
+                Text("${missingAlarmTimes.size} tareas necesitan hora de alarma",style=MaterialTheme.typography.titleSmall)
+                Text("Abre cada tarea de la agenda y guarda su hora antes de continuar las operaciones.")
+                TextButton(onClick={tab=1;module=null;catalog=null;plannerFilter="Pendientes"}){Text("Revisar tareas sin hora")}
+            } }
             if (editor != null || master != null) item {
                 WFCard(Modifier.fillMaxWidth(), Brand.Sand) {
                     Text("Tienes un formulario sin terminar", style = MaterialTheme.typography.titleSmall)
@@ -209,7 +228,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                     val tasks = doc.operations.filter { it.module == Module.TASK }
                     val done = tasks.count { it.status == "Completada" }
                     item { WFHeading("Buenos días, ${doc.supervisor.split(" ").firstOrNull() ?: "supervisor"}", doc.day) { dateDialog = true } }
-                    item { Row { WFStatus(if (doc.operations.any { it.module == Module.CLOSE && it.status == "Cerrada" }) "Jornada cerrada" else if (doc.startedAt.isBlank()) "Jornada sin iniciar" else "Jornada en curso") } }
+                    item { Row { WFStatus(if (doc.operations.any { it.module == Module.CLOSE && it.status == "Cerrada" }) "Jornada cerrada" else if (!DayControl.started(doc)) "Jornada sin iniciar" else "Jornada en curso") } }
                     item { WFCard(Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -218,10 +237,11 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                             }
                             ProgressRing(done, tasks.size)
                         }
-                        Button(onClick = { if (doc.startedAt.isBlank()) { vm.clearActionError(); startDay = true } else tab = 1 }, colors = ButtonDefaults.buttonColors(containerColor = Brand.Amber, contentColor = Brand.Petroleum), modifier = Modifier.heightIn(min = 48.dp).testTag("start-or-continue-day"), shape = RoundedCornerShape(14.dp)) {
-                            Icon(Icons.Outlined.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text(if (doc.startedAt.isBlank()) "Iniciar jornada" else "Continuar jornada")
+                        Button(onClick = { if (!DayControl.started(doc)) { vm.clearActionError(); startDay = true } else tab = 1 }, enabled=!vm.busy&&unfinishedDays.isEmpty(), colors = ButtonDefaults.buttonColors(containerColor = Brand.Amber, contentColor = Brand.Petroleum), modifier = Modifier.heightIn(min = 48.dp).testTag("start-or-continue-day"), shape = RoundedCornerShape(14.dp)) {
+                            Icon(Icons.Outlined.PlayArrow, null); Spacer(Modifier.width(6.dp)); Text(if (!DayControl.started(doc)) "Iniciar jornada" else "Continuar jornada")
                         }
                     } }
+                    item { TextButton(onClick={alarmSettings=true},modifier=Modifier.testTag("alarm-settings")){Text("Alarmas de agenda y cierre · 7:00 p. m.")} }
                     item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         MetricTile(DailySummary.present(doc).toString(), "Presentes", Icons.Outlined.People, Brand.Sage, Modifier.weight(1f).testTag("dashboard-attendance"), onClick = { openModule(Module.ATTENDANCE) })
                         MetricTile(DailySummary.pending(doc).size.toString(), "Pendientes", Icons.Outlined.Checklist, Brand.Sky, Modifier.weight(1f).testTag("dashboard-pending"), onClick = { tab = 2; module = null; catalog = null; pendingOverview = true })
@@ -428,6 +448,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                     }
                     else {
                         item { Text("Configuración y catálogos", style = MaterialTheme.typography.headlineMedium) }
+                        item { Section("Alarmas de la agenda") { Text("Activa sonido, vibración y permisos para iniciar la jornada.");OutlinedButton(onClick={alarmSettings=true}){Text("Configurar alarmas")} } }
                         item { Section("Personal y equipos") {
                             listOf(Triple("operator", "Personal", vm.operators.size), Triple("asset", "Equipos", vm.assets.size), Triple("item", "Artículos", vm.items.size)).forEach { (kind, label, count) ->
                                 OutlinedButton(onClick = { openCatalog(kind) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("catalog-open-$kind")) {
@@ -474,6 +495,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
         SafeAlertDialog(onDismissRequest = { dateDialog = false }, title = { Text("Fecha de trabajo") }, text = { OutlinedTextField(date, { date = it }, label = { Text("AAAA-MM-DD") }) }, confirmButton = { TextButton(onClick = { vm.chooseDay(date); dateDialog = false }) { Text("Ver fecha") } }, dismissButton = { TextButton(onClick = { dateDialog = false }) { Text("Cancelar") } })
     }
     if (startDay) StartDayDialog(vm) { startDay = false }
+    if (alarmSettings) AgendaSettingsDialog(vm) { alarmSettings = false }
     reportOptions?.let { initial -> ReportOptionsDialog(initial, vm, close = { reportOptions = null }, show = { visualReport = it }) }
     visualReport?.let { query -> VisualReportViewer(query, reportDocuments) { visualReport = null } }
     vm.preview?.let { incoming ->

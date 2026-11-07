@@ -22,16 +22,16 @@ class VisualReportsTest {
     private val person=Operator(UUID.randomUUID().toString(),name="Persona sintética")
     private val asset=Asset(UUID.randomUUID().toString(),"EQ-TEST","Grúa","Inactivo temporal")
     private val item=StockItem(UUID.randomUUID().toString(),"Artículo sintético","unidades",5.0)
-    private val ticket=Operation(day=day,module=Module.TICKET,title="Procedimiento operativo",status="Emitido",operatorId=person.id,severity="Moderada",expected="Procedimiento completo",actual="Paso omitido",notes="Descripción y seguimiento de prueba.",recordedBy="Responsable sintético")
+    private val ticket=Operation(time = "09:00", day=day,module=Module.TICKET,title="Procedimiento operativo",status="Emitido",operatorId=person.id,severity="Moderada",expected="Procedimiento completo",actual="Paso omitido",notes="Descripción y seguimiento de prueba.",recordedBy="Responsable sintético")
     private fun document():DailyDocument=DailyCodec.seal(DailyDocument(originId=UUID.randomUUID().toString(),supervisor="Responsable sintético",day=day,revision=1,
         operators=listOf(person),assets=listOf(asset),items=listOf(item),stockBalances=mapOf(item.id to 2.0),operations=listOf(
-            ticket,Operation(day=day,module=Module.TASK,title="Revisar equipos en taller",status="Pendiente"),
-            Operation(day=day,module=Module.ATTENDANCE,title="Asistencia",status="Presente",operatorId=person.id),
-            Operation(day=day,module=Module.FUEL,title="Combustible",status="Pendiente",assetId=asset.id,quantity=40.0),
-            Operation(day=day,module=Module.FAULT,title="Avería de prueba",status="Abierta",assetId=asset.id),
-            Operation(day=day,module=Module.MEAL,title="Cena",status="Solicitada",operatorIds=listOf(person.id)),
-            Operation(day=day,module=Module.PLAN,title="Turno previsto",status="Programado",operatorId=person.id),
-            Operation(day=day,module=Module.POSITION,title="Asignación",status="TRH",operatorId=person.id)
+            ticket,Operation(time = "09:00", day=day,module=Module.TASK,title="Revisar equipos en taller",status="Pendiente"),
+            Operation(time = "09:00", day=day,module=Module.ATTENDANCE,title="Asistencia",status="Presente",operatorId=person.id),
+            Operation(time = "09:00", day=day,module=Module.FUEL,title="Combustible",status="Pendiente",assetId=asset.id,quantity=40.0),
+            Operation(time = "09:00", day=day,module=Module.FAULT,title="Avería de prueba",status="Abierta",assetId=asset.id),
+            Operation(time = "09:00", day=day,module=Module.MEAL,title="Cena",status="Solicitada",operatorIds=listOf(person.id)),
+            Operation(time = "09:00", day=day,module=Module.PLAN,title="Turno previsto",status="Programado",operatorId=person.id),
+            Operation(time = "09:00", day=day,module=Module.POSITION,title="Asignación",status="TRH",operatorId=person.id)
         )))
     @Test fun all_22_report_types_render_real_pdf_and_jpg_with_the_original_logo() {
         val doc=document()

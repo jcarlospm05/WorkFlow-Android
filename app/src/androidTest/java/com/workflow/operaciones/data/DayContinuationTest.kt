@@ -27,15 +27,19 @@ class DayContinuationTest {
     private val bContext=DeviceContext(context,"test-b-${UUID.randomUUID()}")
     private val aDb=Room.inMemoryDatabaseBuilder(context,WorkflowDatabase::class.java).build()
     private val bDb=Room.inMemoryDatabaseBuilder(context,WorkflowDatabase::class.java).build()
-    private val a=WorkflowRepository(aContext,aDb);private val b=WorkflowRepository(bContext,bDb)
+    private val a=WorkflowRepository(aContext,aDb,TestAgendaAccess());private val b=WorkflowRepository(bContext,bDb,TestAgendaAccess())
     private val day="2026-11-06"
+    private suspend fun finishPrevious(repository:WorkflowRepository, date:String) {
+        repository.document(date).operations.filter{it.module==Module.TASK&&it.status=="Pendiente"}.forEach{repository.save(it.copy(status="Completada"))}
+        repository.save(Operation(day=date,module=Module.CLOSE,title="Cierre",status="Cerrada",notes="Seguimiento de taller documentado"))
+    }
     @After fun close(){aDb.close();bDb.close();aContext.filesDir.deleteRecursively();bContext.filesDir.deleteRecursively()}
     @Test fun complete_day_is_loaded_into_live_tables_and_can_return_to_original_phone()=runBlocking {
         val operator=Operator(UUID.randomUUID().toString(),name="Persona sintética")
         val asset=Asset(UUID.randomUUID().toString(),"Equipo sintético","Mula")
         a.addOperator(operator,day);a.addAsset(asset,day);a.startDay(day,setOf("dinner","empty-email"))
-        a.save(Operation(day=day,module=Module.ATTENDANCE,title="Asistencia",status="Presente",operatorId=operator.id))
-        a.save(Operation(day=day,module=Module.FUEL,title="Combustible",status="Pendiente",assetId=asset.id))
+        a.save(Operation(time = "09:00", day=day,module=Module.ATTENDANCE,title="Asistencia",status="Presente",operatorId=operator.id))
+        a.save(Operation(time = "09:00", day=day,module=Module.FUEL,title="Combustible",status="Pendiente",assetId=asset.id))
         val outgoing=a.document(day)
         assertEquals(ContinuationDecision.LOAD,b.continueDay(outgoing))
         assertEquals(ContinuationDecision.ALREADY_LOADED,b.continueDay(outgoing))
@@ -53,10 +57,10 @@ class DayContinuationTest {
     }
     @Test fun concurrent_edits_and_other_dates_are_preserved_until_explicit_replacement()=runBlocking {
         a.startDay(day,setOf("empty-email"));b.continueDay(a.document(day))
-        a.save(Operation(day=day,module=Module.TASK,title="Cambio A",status="Pendiente"))
-        b.save(Operation(day=day,module=Module.TASK,title="Cambio B",status="Pendiente"))
+        a.save(Operation(time = "09:00", day=day,module=Module.TASK,title="Cambio A",status="Pendiente"))
+        b.save(Operation(time = "09:00", day=day,module=Module.TASK,title="Cambio B",status="Pendiente"))
         val tomorrow="2026-11-07"
-        a.save(Operation(day=tomorrow,module=Module.TASK,title="Mañana",status="Pendiente"))
+        a.save(Operation(time = "09:00", day=tomorrow,module=Module.TASK,title="Mañana",status="Pendiente"))
         val before=a.document(day);val future=a.document(tomorrow);val incoming=b.document(day)
         assertEquals(ContinuationDecision.CONFLICT,a.continuationDecision(incoming))
         try{a.continueDay(incoming);fail("Debe detectar conflicto")}catch(_:IllegalArgumentException){}
@@ -68,10 +72,11 @@ class DayContinuationTest {
     @Test fun stock_opening_moves_with_the_day_without_double_counting_prior_history()=runBlocking {
         val item=StockItem(UUID.randomUUID().toString(),"Artículo sintético","unidades")
         a.addItem(item,"2026-11-05")
-        a.save(Operation(day="2026-11-05",module=Module.STOCK,title="Entrada",status="Entrada",itemId=item.id,quantity=10.0))
+        a.save(Operation(time = "09:00", day="2026-11-05",module=Module.STOCK,title="Entrada",status="Entrada",itemId=item.id,quantity=10.0))
+        finishPrevious(a,"2026-11-05")
         a.startDay(day,emptySet());b.continueDay(a.document(day))
         assertEquals(10.0,b.document(day).stockBalances.getValue(item.id),.001)
-        b.save(Operation(day=day,module=Module.STOCK,title="Salida",status="Salida",itemId=item.id,quantity=2.0))
+        b.save(Operation(time = "09:00", day=day,module=Module.STOCK,title="Salida",status="Salida",itemId=item.id,quantity=2.0))
         a.continueDay(b.document(day))
         assertEquals(8.0,a.document(day).stockBalances.getValue(item.id),.001)
         assertEquals(8.0,a.document("2026-11-07").stockBalances.getValue(item.id),.001)
@@ -80,7 +85,7 @@ class DayContinuationTest {
     @Test fun workshop_marks_asset_temporarily_inactive_and_creates_one_follow_up_task()=runBlocking {
         val asset=Asset(UUID.randomUUID().toString(),"Equipo sintético","Grúa")
         a.addAsset(asset,day)
-        val first=Operation(day=day,module=Module.FAULT,title="Frenos",status="Abierta",assetId=asset.id)
+        val first=Operation(time = "09:00", day=day,module=Module.FAULT,title="Frenos",status="Abierta",assetId=asset.id)
         val second=first.copy(id=UUID.randomUUID().toString(),title="Fuga")
         a.save(first);a.save(second)
         assertEquals("Inactivo temporal",a.masters().second.single().state)
@@ -99,7 +104,7 @@ class DayContinuationTest {
     @Test fun a_preselected_fuel_activity_uses_one_task_and_updates_it_when_abastecido()=runBlocking {
         val asset=Asset(UUID.randomUUID().toString(),"Equipo de prueba","Grúa")
         a.addAsset(asset,day);a.startDay(day,setOf("fuel-crane"))
-        val activity=Operation(day=day,module=Module.FUEL,title="Combustible",status="Pendiente",assetId=asset.id)
+        val activity=Operation(time = "09:00", day=day,module=Module.FUEL,title="Combustible",status="Pendiente",assetId=asset.id)
         a.save(activity)
         val task=a.document(day).operations.single{it.module==Module.TASK}
         assertEquals(activity.id,task.sourceId)
@@ -110,8 +115,8 @@ class DayContinuationTest {
         val asset=Asset(UUID.randomUUID().toString(),"Equipo de prueba","Mula")
         val yesterday="2026-11-05"
         a.addAsset(asset,yesterday)
-        val fault=Operation(day=yesterday,module=Module.FAULT,title="Avería anterior",status="Abierta",assetId=asset.id)
-        a.save(fault);a.startDay(day,emptySet())
+        val fault=Operation(time = "09:00", day=yesterday,module=Module.FAULT,title="Avería anterior",status="Abierta",assetId=asset.id)
+        a.save(fault);finishPrevious(a,yesterday);a.startDay(day,emptySet())
         val outgoing=a.document(day)
         assertEquals(fault.id,outgoing.carryOverFaults.single().id)
         b.continueDay(outgoing)
@@ -125,19 +130,20 @@ class DayContinuationTest {
     @Test fun closing_a_day_lists_and_requires_notes_for_an_earlier_unresolved_fault()=runBlocking {
         val asset=Asset(UUID.randomUUID().toString(),"Equipo de prueba","Mula")
         a.addAsset(asset,"2026-11-05")
-        a.save(Operation(day="2026-11-05",module=Module.FAULT,title="Avería anterior",status="Abierta",assetId=asset.id))
+        a.save(Operation(time = "09:00", day="2026-11-05",module=Module.FAULT,title="Avería anterior",status="Abierta",assetId=asset.id))
+        finishPrevious(a,"2026-11-05")
         a.startDay(day,emptySet())
         val review=a.document(day).operations.single{it.templateKey=="workshop-review"}
         a.save(review.copy(status="Completada"))
         assertEquals(1,DailySummary.pending(a.document(day)).size)
-        try { a.save(Operation(day=day,module=Module.CLOSE,title="Cierre del día",status="Cerrada"));fail("Debe documentar la avería pendiente") }
+        try { a.save(Operation(time = "09:00", day=day,module=Module.CLOSE,title="Cierre del día",status="Cerrada"));fail("Debe documentar la avería pendiente") }
         catch(_:IllegalArgumentException){}
         assertFalse(a.document(day).operations.any{it.module==Module.CLOSE})
     }
 
 
     @Test fun stale_form_cannot_overwrite_a_record_updated_by_a_continued_journey()=runBlocking {
-        val original=Operation(day=day,module=Module.TASK,title="Primera versión",status="Pendiente")
+        val original=Operation(time = "09:00", day=day,module=Module.TASK,title="Primera versión",status="Pendiente")
         a.save(original)
         val before=a.document(day).operations.single()
         a.save(before.copy(title="Versión recibida actualizada"))
