@@ -12,6 +12,7 @@ object ContinuationPolicy {
     fun vector(d: DailyDocument): Map<String, Long> = d.versionVector.ifEmpty { mapOf(d.originId to d.revision) }
     fun decide(local: DailyDocument, incoming: DailyDocument): ContinuationDecision {
         require(local.day == incoming.day)
+        if (identity(local) == identity(incoming) && vector(local) == vector(incoming)) return ContinuationDecision.ALREADY_LOADED
         if (local.operations.isEmpty() && local.startedAt.isBlank()) return ContinuationDecision.LOAD
         if (identity(local) != identity(incoming)) return ContinuationDecision.CONFLICT
         val a = vector(local); val b = vector(incoming)

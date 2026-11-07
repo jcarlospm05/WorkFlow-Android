@@ -128,7 +128,7 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
         }
     }
 }
-@Composable internal fun TimelineRow(op: Operation, last: Boolean, click: () -> Unit) {
+@Composable internal fun TimelineRow(op: Operation, last: Boolean, share: (() -> Unit)? = null, click: () -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.width(49.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(op.time.ifBlank { "—" }, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 12.dp))
@@ -147,10 +147,11 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
                 Icon(Icons.Outlined.ChevronRight, "Abrir tarea", Modifier.size(18.dp), tint = Brand.SecondaryText)
             }
             if (op.notes.isNotBlank()) Text(op.notes, style = MaterialTheme.typography.bodyMedium)
+            share?.let { TextButton(onClick = it) { Text("Ver y compartir registro") } }
         }
     }
 }
-@Composable internal fun OperatorAttendanceRow(operator: Operator, operation: Operation?, enabled: Boolean, update: (String, Boolean) -> Unit) {
+@Composable internal fun OperatorAttendanceRow(operator: Operator, operation: Operation?, enabled: Boolean, share: (() -> Unit)? = null, update: (String, Boolean) -> Unit) {
     WFCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             WFIcon(Icons.Outlined.Person, Brand.Selected, 38)
@@ -172,5 +173,6 @@ internal fun friendlyDay(day: String): String = LocalDate.parse(day).format(Date
             }
         }
         Text(operation?.status ?: "Pendiente de marcar", style = MaterialTheme.typography.bodyMedium, color = Brand.SecondaryText)
+        share?.let { TextButton(onClick = it) { Text("Ver y compartir registro") } }
     }
 }

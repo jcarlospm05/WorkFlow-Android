@@ -1,0 +1,98 @@
+package com.workflow.operaciones.data
+
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.SharedPreferences
+import androidx.room.Room
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.workflow.core.*
+import com.workflow.core.Module
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.io.File
+import java.util.UUID
+
+@RunWith(AndroidJUnit4::class)
+class DayContinuationTest {
+    private val context=InstrumentationRegistry.getInstrumentation().targetContext
+    private class DeviceContext(base:Context,private val key:String):ContextWrapper(base) {
+        override fun getSharedPreferences(name:String,mode:Int):SharedPreferences=super.getSharedPreferences("$key-$name",mode)
+        override fun getFilesDir():File=File(super.getCacheDir(),key).apply{mkdirs()}
+    }
+    private val aContext=DeviceContext(context,"test-a-${UUID.randomUUID()}")
+    private val bContext=DeviceContext(context,"test-b-${UUID.randomUUID()}")
+    private val aDb=Room.inMemoryDatabaseBuilder(context,WorkflowDatabase::class.java).build()
+    private val bDb=Room.inMemoryDatabaseBuilder(context,WorkflowDatabase::class.java).build()
+    private val a=WorkflowRepository(aContext,aDb);private val b=WorkflowRepository(bContext,bDb)
+    private val day="2026-11-06"
+    @After fun close(){aDb.close();bDb.close();aContext.filesDir.deleteRecursively();bContext.filesDir.deleteRecursively()}
+    @Test fun complete_day_is_loaded_into_live_tables_and_can_return_to_original_phone()=runBlocking {
+        val operator=Operator(UUID.randomUUID().toString(),name="Persona sintética")
+        val asset=Asset(UUID.randomUUID().toString(),"Equipo sintético","Mula")
+        a.addOperator(operator,day);a.addAsset(asset,day);a.startDay(day,setOf("dinner","empty-email"))
+        a.save(Operation(day=day,module=Module.ATTENDANCE,title="Asistencia",status="Presente",operatorId=operator.id))
+        a.save(Operation(day=day,module=Module.FUEL,title="Combustible",status="Pendiente",assetId=asset.id))
+        val outgoing=a.document(day)
+        assertEquals(ContinuationDecision.LOAD,b.continueDay(outgoing))
+        assertEquals(ContinuationDecision.ALREADY_LOADED,b.continueDay(outgoing))
+        val loaded=b.document(day)
+        assertEquals(outgoing.operations,loaded.operations)
+        assertEquals(outgoing.startedAt,loaded.startedAt)
+        assertEquals(operator,b.masters().first.single())
+        val fuel=loaded.operations.single{it.module==Module.FUEL}
+        b.save(fuel.copy(status="Abastecido",quantity=35.0))
+        val returning=b.document(day)
+        assertEquals(ContinuationDecision.UPDATE,a.continueDay(returning))
+        assertEquals("Abastecido",a.document(day).operations.single{it.id==fuel.id}.status)
+        assertEquals("Completada",a.document(day).operations.single{it.sourceId==fuel.id}.status)
+        assertEquals(1,DailySummary.present(a.document(day)))
+    }
+    @Test fun concurrent_edits_and_other_dates_are_preserved_until_explicit_replacement()=runBlocking {
+        a.startDay(day,setOf("empty-email"));b.continueDay(a.document(day))
+        a.save(Operation(day=day,module=Module.TASK,title="Cambio A",status="Pendiente"))
+        b.save(Operation(day=day,module=Module.TASK,title="Cambio B",status="Pendiente"))
+        val tomorrow="2026-11-07"
+        a.save(Operation(day=tomorrow,module=Module.TASK,title="Mañana",status="Pendiente"))
+        val before=a.document(day);val future=a.document(tomorrow);val incoming=b.document(day)
+        assertEquals(ContinuationDecision.CONFLICT,a.continuationDecision(incoming))
+        try{a.continueDay(incoming);fail("Debe detectar conflicto")}catch(_:IllegalArgumentException){}
+        assertEquals(before,a.document(day));assertEquals(future,a.document(tomorrow))
+        a.continueDay(incoming,replaceConflict=true)
+        assertTrue(a.document(day).operations.any{it.title=="Cambio B"})
+        assertTrue(a.document(tomorrow).operations.any{it.title=="Mañana"})
+    }
+    @Test fun stock_opening_moves_with_the_day_without_double_counting_prior_history()=runBlocking {
+        val item=StockItem(UUID.randomUUID().toString(),"Artículo sintético","unidades")
+        a.addItem(item,"2026-11-05")
+        a.save(Operation(day="2026-11-05",module=Module.STOCK,title="Entrada",status="Entrada",itemId=item.id,quantity=10.0))
+        a.startDay(day,emptySet());b.continueDay(a.document(day))
+        assertEquals(10.0,b.document(day).stockBalances.getValue(item.id),.001)
+        b.save(Operation(day=day,module=Module.STOCK,title="Salida",status="Salida",itemId=item.id,quantity=2.0))
+        a.continueDay(b.document(day))
+        assertEquals(8.0,a.document(day).stockBalances.getValue(item.id),.001)
+        assertEquals(8.0,a.document("2026-11-07").stockBalances.getValue(item.id),.001)
+        assertEquals(10.0,a.document("2026-11-05").stockBalances.getValue(item.id),.001)
+    }
+    @Test fun workshop_marks_asset_temporarily_inactive_and_creates_one_follow_up_task()=runBlocking {
+        val asset=Asset(UUID.randomUUID().toString(),"Equipo sintético","Grúa")
+        a.addAsset(asset,day)
+        val first=Operation(day=day,module=Module.FAULT,title="Frenos",status="Abierta",assetId=asset.id)
+        val second=first.copy(id=UUID.randomUUID().toString(),title="Fuga")
+        a.save(first);a.save(second)
+        assertEquals("Inactivo temporal",a.masters().second.single().state)
+        assertEquals(1,a.document(day).operations.count{it.templateKey=="workshop-review"})
+        a.save(first.copy(status="Cerrada"));assertEquals("Inactivo temporal",a.masters().second.single().state)
+        a.save(second.copy(status="Cerrada"));assertEquals("Activo",a.masters().second.single().state)
+        assertTrue(a.document(day).operations.filter{it.module==Module.FAULT}.all{it.resolvedAt.isNotEmpty()})
+    }
+    @Test fun starting_twice_never_duplicates_templates_and_default_export_prompts_are_off()=runBlocking {
+        assertFalse(a.shareAfterSave)
+        a.startDay(day,setOf("dinner","lunch"))
+        try{a.startDay(day,setOf("dinner"));fail("La jornada ya está iniciada")}catch(_:IllegalArgumentException){}
+        assertEquals(2,a.document(day).operations.size)
+    }
+}

@@ -66,6 +66,11 @@ object DailyCodec {
         require(d.stockBalances.keys == d.items.map { it.id }.toSet()) { "Existencias incompletas" }
         require(d.stockBalances.values.all { it.isFinite() && it >= 0 }) { "Saldo inválido" }
         require(d.stockOpeningBalances.keys.all { id -> d.items.any { it.id == id } } && d.stockOpeningBalances.values.all { it.isFinite() && it >= 0 }) { "Existencias iniciales inválidas" }
+        require(d.carryOverFaults.size <= 3000 && (d.operations + d.carryOverFaults).distinctBy { it.id }.size == d.operations.size + d.carryOverFaults.size) { "Averías de seguimiento duplicadas" }
+        d.carryOverFaults.forEach { fault ->
+            require(fault.day < d.day && fault.module == Module.FAULT && fault.sourceId == null && fault.templateKey.isEmpty()) { "Avería de seguimiento inválida" }
+            Rules.operation(fault, d.operators, d.assets, d.items)
+        }
     }
 }
 

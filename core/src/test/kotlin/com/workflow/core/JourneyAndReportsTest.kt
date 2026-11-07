@@ -70,7 +70,8 @@ class JourneyAndReportsTest {
         val notes="Descripción con acentos. ".repeat(100)
         val op=Operation(day="2026-11-06",module=Module.TICKET,title="Motivo",status="Emitido",operatorId=operator.id,notes=notes,severity="Grave",expected="Proceso completo",actual="Paso omitido")
         val result=ReportBuilder.build(ReportQuery(ReportType.TICKET,op.day,operationId=op.id),listOf(document(ops=listOf(op))))
-        assertContains(result.text(),notes);assertContains(result.text(),"Grave");assertContains(result.text(),"Proceso completo")
+        assertEquals(notes,result.sections.last().note)
+        assertContains(result.text(),notes.trimEnd());assertContains(result.text(),"Grave");assertContains(result.text(),"Proceso completo")
         assertTrue(result.compact)
     }
     @Test fun empty_install_reports_never_create_business_records() {

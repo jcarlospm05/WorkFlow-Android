@@ -163,7 +163,7 @@ class UserExperienceTest {
         compose.onNodeWithTag("catalog-title").assertTextEquals("Personal")
         capture("ux-catalogo-personal")
     }
-    @Test fun protected_incoming_report_opens_with_the_agreed_phrase_without_overwriting_own_data() {
+    @Test fun protected_incoming_day_loads_into_the_dashboard_with_the_agreed_phrase() {
         prepare()
         model.repository.transferKeys.clear()
         val own = model.document!!
@@ -179,11 +179,26 @@ class UserExperienceTest {
         tap("report-key-submit")
         compose.waitUntil(90_000) { !model.busy && model.preview != null }
         capture("ux-informe-recibido-protegido")
-        compose.onNodeWithText("Guardar informe").performClick()
+        compose.onNodeWithText("Cargar jornada").performClick()
         compose.waitUntil(60_000) { !model.busy && model.received.isNotEmpty() }
         assertEquals(incoming, model.received.single())
-        assertEquals(own, model.document)
+        assertEquals(incoming.day, model.day)
+        assertEquals(incoming.operations, model.document!!.operations)
+        assertEquals(incoming.supervisor, model.document!!.supervisor)
         assertTrue(model.hasTransferKey)
     }
+    @Test fun bottom_tabs_remain_available_inside_a_form_and_its_draft_can_be_resumed() {
+        prepare();show { WorkflowScreen(model) }
+        tap("nav-4")
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasTestTag("catalog-open-operator"))
+        tap("catalog-open-operator");tap("catalog-add")
+        field("master-name","Borrador entre módulos")
+        tap("nav-2")
+        compose.onNodeWithTag("screen-title",useUnmergedTree=true).assertTextEquals("Operación")
+        compose.onNodeWithTag("resume-draft").performScrollTo().performClick()
+        compose.onNodeWithTag("master-name").assertTextContains("Borrador entre módulos")
+        tap("dialog-confirm")
+        compose.waitUntil(30_000){!model.busy&&model.operators.size==1}
+        assertEquals("Borrador entre módulos",model.operators.single().name)
+    }
 }
-

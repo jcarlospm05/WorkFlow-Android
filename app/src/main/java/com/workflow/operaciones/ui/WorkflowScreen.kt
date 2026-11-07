@@ -259,7 +259,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                     item { ProgressPanel(done, tasks.size) }
                     item { PillTabs(listOf("Todas", "Pendientes", "Completadas"), plannerFilter) { plannerFilter = it } }
                     if (agenda.isEmpty()) item { Text("No hay tareas en esta vista.", color = Brand.SecondaryText) }
-                    items(agenda.size, key = { agenda[it].id }) { index -> TimelineRow(agenda[index], index == agenda.lastIndex) { openOperation(agenda[index]) } }
+                    items(agenda.size, key = { agenda[it].id }) { index -> TimelineRow(agenda[index], index == agenda.lastIndex, share = { openEvent(agenda[index]) }) { openOperation(agenda[index]) } }
                     if (plannerFilter != "Completadas" && done > 0) item { Surface(Modifier.fillMaxWidth().clickable { plannerFilter = "Completadas" }, shape = RoundedCornerShape(16.dp), color = Brand.Sage) { Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Icon(Icons.Outlined.CheckCircle, null, tint = Brand.Green); Text("Ver $done tareas completadas", Modifier.weight(1f)); Icon(Icons.Outlined.ExpandMore, null) } } }
                     item { Button(onClick = { newOperation(Module.TASK) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Outlined.Add, null); Spacer(Modifier.width(8.dp)); Text("Añadir tarea") } }
                     item { TextButton(onClick = { newOperation(Module.CLOSE) }, modifier = Modifier.fillMaxWidth()) { Text(if (doc.operations.any { it.module == Module.CLOSE && it.status == "Cerrada" }) "Reabrir jornada" else "Revisar cierre del día") } }
@@ -315,7 +315,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                                 }
                                 items(operators, key = { it.id }) { operator ->
                                     val op = attendance.firstOrNull { it.operatorId == operator.id }
-                                    OperatorAttendanceRow(operator, op, !vm.busy) { status, extended ->
+                                    OperatorAttendanceRow(operator, op, !vm.busy, share = op?.let { { openEvent(it) } }) { status, extended ->
                                         vm.save((op ?: Operation(day = doc.day, module = Module.ATTENDANCE, title = "Asistencia", status = status, operatorId = operator.id, shift = attendanceShift)).copy(status = status, extended = extended), offerShare = false) { }
                                     }
                                 }
@@ -339,6 +339,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                                 item { WFCard(Modifier.fillMaxWidth()) { Text("$mealType para ${mealSelected.size} personas", style = MaterialTheme.typography.titleMedium)
                                     OutlinedButton(onClick = { mealPreview = true }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Outlined.Visibility, null); Spacer(Modifier.width(8.dp)); Text("Vista previa de lista") }
                                     Button(onClick = { vm.save((savedMeal ?: Operation(day = doc.day, module = Module.MEAL, title = "Solicitud de ${mealType.lowercase()}", status = "Solicitada", mealType = mealType)).copy(operatorIds = mealSelected.toList().sorted())) { } }, enabled = mealSelected.isNotEmpty() && !vm.busy, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Outlined.Save, null); Spacer(Modifier.width(8.dp)); Text("Guardar solicitud") }
+                                    if (savedMeal != null) TextButton(onClick = { openEvent(savedMeal) }) { Text("Ver y compartir solicitud guardada") }
                                 } }
                             }
                             Module.STOCK -> {
@@ -379,7 +380,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                                 }
                             }
                             else -> {
-                                val rows = doc.operations.filter { it.module == selectedModule }
+                                val rows = (doc.operations + if (selectedModule == Module.FAULT) doc.carryOverFaults else emptyList()).filter { it.module == selectedModule }
                                 if (selectedModule == Module.PLAN) item { WeekStrip(doc.day, vm::chooseDay) }
                                 if (selectedModule == Module.FAULT) item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { MetricTile(rows.count { it.status == "Abierta" }.toString(), "Abiertas", Icons.Outlined.Build, Brand.Sand, Modifier.weight(1f)); MetricTile(rows.count { it.status == "Cerrada" }.toString(), "Resueltas", Icons.Outlined.CheckCircle, Brand.Sage, Modifier.weight(1f)) } }
                                 if (selectedModule == Module.TICKET) item { WFCard(Modifier.fillMaxWidth(), Brand.Sand) { Text("${rows.count { it.status == "Emitido" }} tickets emitidos", style = MaterialTheme.typography.titleMedium); Text("Registro formal y seguimiento por operador.", style = MaterialTheme.typography.bodyMedium) } }

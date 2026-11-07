@@ -58,8 +58,8 @@ internal fun copyReportText(context: Context, text: String) {
             }
             OutlinedTextField(from,{from=it;error=null},label={Text("Desde · AAAA-MM-DD")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("report-from"))
             OutlinedTextField(to,{to=it;error=null},label={Text("Hasta · AAAA-MM-DD")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("report-to"))
-            ReportDropdown("Operador",operator,listOf(null to "Todos los operadores")+vm.operators.map{it.id to it.displayLabel}) { operator=it }
-            ReportDropdown("Equipo",asset,listOf(null to "Todos los equipos")+vm.assets.map{it.id to it.code}) { asset=it }
+            if(type !in listOf(ReportType.ASSETS,ReportType.STOCK)) ReportDropdown("Operador",operator,listOf(null to "Todos los operadores")+vm.operators.map{it.id to it.displayLabel}) { operator=it }
+            if(type in listOf(ReportType.GENERAL,ReportType.CLOSE,ReportType.FUEL,ReportType.WORKSHOP,ReportType.ASSET_HISTORY,ReportType.ASSETS)) ReportDropdown("Equipo",asset,listOf(null to "Todos los equipos")+vm.assets.map{it.id to it.code}) { asset=it }
             val statuses = when(type) {
                 ReportType.FUEL -> Rules.statuses.getValue(com.workflow.core.Module.FUEL)
                 ReportType.TICKETS,ReportType.OPERATOR_TICKETS -> Rules.statuses.getValue(com.workflow.core.Module.TICKET)

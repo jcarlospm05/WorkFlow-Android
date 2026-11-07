@@ -78,8 +78,8 @@ object ReportBuilder {
         val operators = docs.flatMap { it.operators }.associateBy { it.id }
         val assets = docs.flatMap { it.assets }.associateBy { it.id }
         val items = docs.flatMap { it.items }.associateBy { it.id }
-        val all = docs.flatMap { it.operations }.associateBy { it.id }.values.toList()
-        val rows = all.filter { it.day in query.from..query.to }
+        val all = docs.flatMap { it.operations + it.carryOverFaults }.associateBy { it.id }.values.toList()
+        val rows = all.filter { op -> op.day in query.from..query.to || (query.type in listOf(ReportType.WORKSHOP, ReportType.ASSET_HISTORY) && op.module == Module.FAULT && op.day <= query.to && (op.status != "Cerrada" || (op.resolvedAt.isNotBlank() && java.time.Instant.parse(op.resolvedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString() >= query.from))) }
             .filter { query.operatorId == null || it.operatorId == query.operatorId || query.operatorId in it.operatorIds }
             .filter { query.assetId == null || it.assetId == query.assetId }
             .filter { query.operationId == null || it.id == query.operationId }
@@ -98,7 +98,8 @@ object ReportBuilder {
         val period = if (query.from == query.to) date(query.from) else "${date(query.from)} – ${date(query.to)}"
         val filters = listOfNotNull(query.operatorId?.let { "Operador: ${operator(it)}" }, query.assetId?.let { "Equipo: ${asset(it)}" }, query.status)
         val supervisor = inRange.lastOrNull()?.supervisor.orEmpty()
-        var subtitle = (filters + supervisor.takeIf(String::isNotBlank)).joinToString(" · ").ifBlank { "Todos los registros del período" }
+        val updated = inRange.lastOrNull()?.generatedAt?.let { java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", es).withZone(java.time.ZoneId.systemDefault()).format(java.time.Instant.parse(it)) }
+        var subtitle = (filters + listOfNotNull(supervisor.takeIf(String::isNotBlank), updated?.let { "Actualizado $it" })).joinToString(" · ").ifBlank { "Todos los registros del período" }
         var title = query.type.label
         when (query.type) {
             ReportType.GENERAL, ReportType.CLOSE -> {

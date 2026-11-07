@@ -52,7 +52,8 @@ val Operator.displayLabel: String get() = listOf(name, code).filter { it.isNotBl
     @EncodeDefault(EncodeDefault.Mode.NEVER) val journeyId: String = "",
     @EncodeDefault(EncodeDefault.Mode.NEVER) val versionVector: Map<String, Long> = emptyMap(),
     @EncodeDefault(EncodeDefault.Mode.NEVER) val startedAt: String = "",
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val stockOpeningBalances: Map<String, Double> = emptyMap()
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val stockOpeningBalances: Map<String, Double> = emptyMap(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val carryOverFaults: List<Operation> = emptyList()
 )
 
 object Rules {
