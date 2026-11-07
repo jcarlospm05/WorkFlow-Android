@@ -6,6 +6,8 @@ import android.provider.MediaStore
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.test.*
@@ -44,7 +46,12 @@ class UserExperienceTest {
     private fun show(content: @Composable () -> Unit) {
         compose.activityRule.scenario.onActivity { activity ->
             activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) // Synthetic test evidence only.
-            activity.setContent { WorkflowTheme(content) }
+            activity.setContent { WorkflowTheme {
+                // Production editors are hosted inside the activity, with bottom navigation.
+                CompositionLocalProvider(LocalInlineEditor provides true) {
+                    Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) { content() }
+                }
+            } }
         }
         compose.waitForIdle()
     }

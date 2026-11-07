@@ -6,6 +6,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Serializable enum class ReportType(val label: String) {
     GENERAL("Progreso del día"), CLOSE("Cierre del día"), WEEK("Agenda semanal"), MONTH("Agenda mensual"),
@@ -42,11 +43,12 @@ data class ReportCalendar(val year: Int, val month: Int, val days: List<ReportCa
 data class ReportSection(
     val title: String, val headers: List<String> = emptyList(), val rows: List<List<String>> = emptyList(),
     val note: String = "", val chart: List<ChartValue> = emptyList(), val donut: Boolean = false,
-    val calendar: ReportCalendar? = null
+    val calendar: ReportCalendar? = null, val centerLabel: String = ""
 )
+data class ReportBanner(val label: String, val value: String, val status: String)
 data class VisualReport(
     val query: ReportQuery, val title: String, val period: String, val subtitle: String,
-    val metrics: List<ReportMetric>, val sections: List<ReportSection>, val compact: Boolean = false
+    val metrics: List<ReportMetric>, val sections: List<ReportSection>, val compact: Boolean = false, val banner: ReportBanner? = null
 ) {
     fun text(): String = buildString {
         appendLine("*WorkFlow · $title*"); appendLine(period); if (subtitle.isNotBlank()) appendLine(subtitle)
@@ -101,6 +103,7 @@ object ReportBuilder {
         val updated = inRange.lastOrNull()?.generatedAt?.let { java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", es).withZone(java.time.ZoneId.systemDefault()).format(java.time.Instant.parse(it)) }
         var subtitle = (filters + listOfNotNull(supervisor.takeIf(String::isNotBlank), updated?.let { "Actualizado $it" })).joinToString(" · ").ifBlank { "Todos los registros del período" }
         var title = query.type.label
+        var banner: ReportBanner? = null
         when (query.type) {
             ReportType.GENERAL, ReportType.CLOSE -> {
                 val attendance = rows.filter { it.module == Module.ATTENDANCE }
@@ -110,7 +113,7 @@ object ReportBuilder {
                 metrics += listOf(ReportMetric("$present", "Presentes únicos", "sage"), ReportMetric("$done/${tasks.size}", "Tareas completadas"),
                     ReportMetric("${latest?.assets?.count { it.state in listOf("En taller", "Inactivo temporal") } ?: 0}", "Equipos en taller", "sand"),
                     ReportMetric("${rows.count { it.module == Module.TICKET }}", "Tickets registrados"))
-                if (tasks.isNotEmpty()) sections += ReportSection("Avance de la jornada", chart = listOf(ChartValue("Completadas", done.toDouble()), ChartValue("Pendientes", (tasks.size-done).toDouble(), "amber")), donut = true)
+                if (tasks.isNotEmpty()) sections += ReportSection("Avance de la jornada", chart = listOf(ChartValue("Completadas", done.toDouble()), ChartValue("Pendientes", (tasks.size-done).toDouble(), "amber")), donut = true, centerLabel = "${(100.0*done/tasks.size).roundToInt()}%")
                 sections += ReportSection("Estado por módulo", listOf("Módulo", "Registros", "Pendientes"), Module.entries.filter { it != Module.CLOSE }.map { module ->
                     val data = rows.filter { it.module == module }
                     listOf(module.label, "${data.size}", "${data.count { it.status in listOf("Pendiente", "Abierta", "En proceso", "Borrador", "Preparada") }}")
@@ -202,7 +205,8 @@ object ReportBuilder {
                 else {
                     title = if (query.type == ReportType.TICKET) "Ticket de infracción" else op.title
                     subtitle = if (op.module == Module.TICKET) "Departamento de operaciones · ${ticketReference(op)}" else "Registro individual · ${op.module.label}"
-                    metrics += ReportMetric(op.status, "Estado", statusTone(op.status))
+                    if (query.type == ReportType.TICKET) banner = ReportBanner("OPERADOR", operator(op.operatorId), op.status)
+                    else metrics += ReportMetric(op.status, "Estado", statusTone(op.status))
                     val fields = mutableListOf(listOf("Fecha y hora", "${date(op.day)} · ${op.time.ifBlank { "Sin hora registrada" }}"), listOf("Operador", operator(op.operatorId)))
                     op.assetId?.let { fields += listOf("Equipo", asset(it)) }
                     fields += listOf("Motivo / actividad", op.title)
@@ -252,7 +256,7 @@ object ReportBuilder {
                 sections += ReportSection("Estado de la flota", listOf("Equipo", "Tipo", "Estado"), selected.map { listOf(it.code, it.type, it.state) })
             }
         }
-        return VisualReport(query, title, period, subtitle, metrics, sections, compact = query.type in listOf(ReportType.TICKET, ReportType.EVENT))
+        return VisualReport(query, title, period, subtitle, metrics, sections, compact = query.type in listOf(ReportType.TICKET, ReportType.EVENT), banner = banner)
     }
     fun statusTone(status: String): String = when {
         status in listOf("Completada", "Presente", "Abastecido", "Cerrada", "Activo", "Emitido", "Libre disfrutado") -> "sage"

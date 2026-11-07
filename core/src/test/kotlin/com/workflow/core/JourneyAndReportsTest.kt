@@ -129,4 +129,14 @@ class JourneyAndReportsTest {
         assertEquals("1",report.metrics.first().value)
         assertEquals(1,report.sections.last().rows.size)
     }
+
+    @Test fun report_progress_and_ticket_emphasis_follow_the_fixed_visual_reference() {
+        val tasks=(1..8).map { Operation(day="2026-11-06",module=Module.TASK,title="Actividad $it",status=if(it<=5)"Completada"else "Pendiente") }
+        val d=document(ops=tasks)
+        val general=ReportBuilder.build(ReportQuery(ReportType.GENERAL,d.day),listOf(d))
+        assertEquals("63%",general.sections.first{it.donut}.centerLabel)
+        val ticket=Operation(day=d.day,module=Module.TICKET,title="Motivo",status="Emitido",operatorId=operator.id)
+        val single=ReportBuilder.build(ReportQuery(ReportType.TICKET,d.day,operationId=ticket.id),listOf(document(ops=listOf(ticket))))
+        assertEquals(operator.name,single.banner!!.value);assertEquals("Emitido",single.banner!!.status)
+    }
 }

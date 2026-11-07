@@ -73,7 +73,7 @@ internal class VisualReportRenderer(private val context: Context) {
     fun write(value:VisualReport,file:File) {
         report=value;width=if(value.compact)600f else 595f;height=if(value.compact)720f else 842f;number=0;pdf=PdfDocument()
         try {
-            newPage();metrics(value.metrics)
+            newPage();value.banner?.let(::banner);metrics(value.metrics)
             value.sections.forEach { section ->
                 section.calendar?.let { calendar(section.title,it) }
                 if(section.chart.isNotEmpty())chart(section)
@@ -82,6 +82,19 @@ internal class VisualReportRenderer(private val context: Context) {
             }
             pdf.finishPage(page);file.outputStream().use(pdf::writeTo)
         } catch(e:Exception) { file.delete();throw e } finally { pdf.close() }
+    }
+    private fun banner(value:ReportBanner) {
+        val nameLines=lines(value.value,body-160,20f)
+        val h=max(59f,34f+nameLines.size*23)
+        ensure(h+14);card(margin,y,body,h,"sky")
+        text(value.label,margin+14,y+10,8.2f,false,"secondary")
+        nameLines.forEachIndexed { i,line -> text(line,margin+14,y+27+i*23,20f,true) }
+        val tone=ReportBuilder.statusTone(value.status);font(9f)
+        val pw=max(70f,paint.measureText(value.status)+22)
+        val x=width-margin-pw-14
+        paint.color=color(tone);canvas.drawRoundRect(x,y+19,x+pw,y+42,12f,12f,paint)
+        text(value.status,x+11,y+24,9f,false,if(tone=="rose")"red"else "petrol")
+        y+=h+14
     }
     private fun metrics(values:List<ReportMetric>) {
         values.chunked(4).forEach { row ->
@@ -156,7 +169,12 @@ internal class VisualReportRenderer(private val context: Context) {
                 paint.style=Paint.Style.FILL;paint.color=color(tones[i]);canvas.drawCircle(margin+133,y+47+i*18,3.5f,paint)
                 text("${item.label} · ${ReportBuilder.number(item.value)}",margin+143,y+41+i*18,9f)
             }
-            paint.style=Paint.Style.FILL;text(ReportBuilder.number(total),margin+48,y+67,19f,true);y+=h+14
+            paint.style=Paint.Style.FILL
+            val label=section.centerLabel.ifBlank { ReportBuilder.number(total) }
+            font(19f,true)
+            val baseline=rect.centerY()-(paint.fontMetrics.ascent+paint.fontMetrics.descent)/2
+            canvas.drawText(label,rect.centerX()-paint.measureText(label)/2,baseline,paint)
+            y+=h+14
         }else section.chart.chunked(15).forEachIndexed{part,values->
             val h=46f+values.size*26;ensure(h);card(margin,y,body,h);text(section.title+if(part>0)" · continuación"else "",margin+14,y+10,11f,true)
             val maxValue=values.maxOfOrNull{it.value}?.coerceAtLeast(1.0)?:1.0
