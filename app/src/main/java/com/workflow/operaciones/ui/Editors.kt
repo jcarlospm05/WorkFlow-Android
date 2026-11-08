@@ -100,7 +100,10 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
         Text(if (savedCount > 0) "Registro guardado. Puedes añadir el siguiente." else "Los cambios se guardan en tu informe del día.", style = MaterialTheme.typography.bodyMedium)
         (error ?: vm.actionError)?.let { Text(it, color = Brand.Red) }
         OutlinedTextField(title, { title = it }, label = { Text(if (kind == Module.TICKET) "Motivo de la infracción" else "Título / descripción breve") }, modifier = Modifier.fillMaxWidth().focusRequester(titleFocus).testTag("operation-title"))
-        if(kind==Module.TASK)Choice("Módulo donde se realiza",targetModule.name,TaskRouting.modules.map{it.name to TaskRouting.label(it)}){targetModule=Module.valueOf(it)}
+        if(kind==Module.TASK) {
+            if(original.sourceId==null && original.templateKey.isBlank())Choice("Módulo donde se realiza",targetModule.name,TaskRouting.modules.map{it.name to TaskRouting.label(it)}){targetModule=Module.valueOf(it)}
+            else Text("Módulo: ${TaskRouting.label(targetModule)}",style=MaterialTheme.typography.bodyMedium)
+        }
         if(kind==Module.TASK && targetModule==Module.MEAL)Options("Comida",mealType,listOf("Cena","Almuerzo")){mealType=it}
         Options("Estado", status, Rules.statuses.getValue(kind)) { status = it }
         if (kind in listOf(Module.ATTENDANCE, Module.PLAN, Module.TICKET, Module.POSITION, Module.FUEL, Module.FAULT)) {

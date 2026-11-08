@@ -137,7 +137,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
     fun captureFormRoute() { formTab = tab; formModule = module; formCatalog = catalog; formDay = vm.day; formVisible = true }
     fun openOperation(op: Operation) { captureFormRoute(); editor = op; master = null }
     fun executeTask(op: Operation) {
-        if(op.module!=Module.TASK) { openOperation(op);return }
+        if(op.module!=Module.TASK || op.status=="Completada") { openOperation(op);return }
         val target=TaskRouting.destination(op,vm.document?.operations.orEmpty())
         openModule(target)
         if(target==Module.MEAL) mealType=if(op.templateKey=="lunch")"Almuerzo" else op.mealType

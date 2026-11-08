@@ -362,6 +362,13 @@ class UserExperienceTest {
         compose.onNodeWithText("Revisión de asistencia").performClick()
         compose.onNodeWithTag("screen-title",useUnmergedTree=true).assertTextEquals("Asistencia")
         compose.onNodeWithText("Mañana").assertDoesNotExist()
+        tap("nav-1")
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasText("Completadas"))
+        compose.onNodeWithText("Completadas").performClick()
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasText("Solicitar cena"))
+        compose.onNodeWithText("Solicitar cena").performClick()
+        compose.onNodeWithTag("operation-title").assertTextContains("Solicitar cena")
+        compose.onNodeWithText("Módulo: Comidas").assertExists()
     }
 
 }
