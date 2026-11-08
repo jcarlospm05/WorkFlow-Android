@@ -55,7 +55,11 @@ internal fun copyReportText(context: Context, text: String) {
     }
 }
 
-@Composable internal fun VisualReportViewer(query: ReportQuery, documents: List<DailyDocument>, edit: ((ReportQuery)->Unit)? = null, close: () -> Unit) {
+@Composable internal fun VisualReportViewer(query: ReportQuery, documents: List<DailyDocument>, close: () -> Unit) {
+    VisualReportViewer(query,documents,edit=null,close=close)
+}
+
+@Composable internal fun VisualReportViewer(query: ReportQuery, documents: List<DailyDocument>, edit: ((ReportQuery)->Unit)?, close: () -> Unit) {
     val context=LocalContext.current
     val report=remember(query,documents){ReportBuilder.build(query,documents)}
     var pdf by remember(report){mutableStateOf<File?>(null)}
