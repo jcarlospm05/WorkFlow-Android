@@ -48,16 +48,20 @@ internal fun copyReportText(context: Context, text: String) {
     var asset by rememberSaveable { mutableStateOf(initial.assetId) }
     var status by rememberSaveable { mutableStateOf(initial.status) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var filters by rememberSaveable { mutableStateOf(initial.operatorId!=null || initial.assetId!=null || initial.status!=null || initial.type in listOf(ReportType.OPERATOR_TICKETS,ReportType.ASSET_HISTORY)) }
     SafeAlertDialog(onDismissRequest = close, title = { Text("Preparar reporte") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            ReportDropdown("Reporte", type.name, ReportType.entries.filter { it !in listOf(ReportType.TICKET, ReportType.EVENT) }.map { it.name to it.label }) { value -> type = ReportType.valueOf(value!!); status = null; operator = null; asset = null }
+            ReportDropdown("Reporte", type.name, ReportType.entries.filter { it !in listOf(ReportType.TICKET, ReportType.EVENT) }.map { it.name to it.label }) { value -> type = ReportType.valueOf(value!!); status = null; operator = null; asset = null;filters=type in listOf(ReportType.OPERATOR_TICKETS,ReportType.ASSET_HISTORY) }
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 TextButton(onClick = { from=vm.day;to=vm.day }) { Text("Día") }
                 TextButton(onClick = { val d=LocalDate.parse(vm.day).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));from=d.toString();to=d.plusDays(6).toString() }) { Text("Semana") }
                 TextButton(onClick = { val d=LocalDate.parse(vm.day);from=d.withDayOfMonth(1).toString();to=d.withDayOfMonth(d.lengthOfMonth()).toString() }) { Text("Mes") }
             }
-            OutlinedTextField(from,{from=it;error=null},label={Text("Desde · AAAA-MM-DD")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("report-from"))
-            OutlinedTextField(to,{to=it;error=null},label={Text("Hasta · AAAA-MM-DD")},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("report-to"))
+            WorkDateField("Desde",from,"report-from"){from=it;error=null}
+            WorkDateField("Hasta",to,"report-to"){to=it;error=null}
+            val applied=listOf(operator,asset,status).count{it!=null}
+            TextButton(onClick={filters=!filters},modifier=Modifier.fillMaxWidth().testTag("report-filters")){Text(if(filters)"Ocultar filtros" else if(applied>0)"Ver filtros · $applied activos" else "Filtrar por operador, equipo o estado")}
+            if(filters) {
             if(type !in listOf(ReportType.ASSETS,ReportType.STOCK)) ReportDropdown("Operador",operator,listOf(null to "Todos los operadores")+vm.operators.map{it.id to it.displayLabel}) { operator=it }
             if(type in listOf(ReportType.GENERAL,ReportType.CLOSE,ReportType.FUEL,ReportType.WORKSHOP,ReportType.ASSET_HISTORY,ReportType.ASSETS)) ReportDropdown("Equipo",asset,listOf(null to "Todos los equipos")+vm.assets.map{it.id to it.code}) { asset=it }
             val statuses = when(type) {
@@ -67,6 +71,8 @@ internal fun copyReportText(context: Context, text: String) {
                 else -> emptyList()
             }
             if(statuses.isNotEmpty())ReportDropdown("Estado",status,listOf(null to "Todos los estados")+statuses.map{it to it}){status=it}
+            if(applied>0)TextButton(onClick={operator=null;asset=null;status=null}){Text("Quitar filtros")}
+            }
             error?.let { Text(it,color=Brand.Red) }
         }
     }, confirmButton = { TextButton(onClick = {
@@ -133,6 +139,7 @@ internal fun copyReportText(context: Context, text: String) {
     var selected by rememberSaveable { mutableStateOf(emptySet<String>()) }
     var times by rememberSaveable { mutableStateOf(emptyMap<String,String>()) }
     var settings by rememberSaveable { mutableStateOf(false) }
+    var hours by rememberSaveable { mutableStateOf(false) }
     val defaults=vm.repository.agendaAccess.defaultTime()
     val blockers=DayControl.blockers(vm.history,vm.day)
     SafeAlertDialog(onDismissRequest={if(!vm.busy)close()},title={Text("Iniciar jornada")},text={
@@ -143,7 +150,8 @@ internal fun copyReportText(context: Context, text: String) {
                 Checkbox(template.key in selected,{checked->selected=if(checked)selected+template.key else selected-template.key},enabled=!vm.busy)
                 Text(template.title,Modifier.weight(1f))
             } }
-            DayTemplates.all.filter{it.key in selected}.forEach { task ->
+            if(selected.isNotEmpty())TextButton(onClick={hours=!hours}){Text(if(hours)"Ocultar horarios opcionales" else "Añadir horarios opcionales")}
+            if(hours)DayTemplates.all.filter{it.key in selected}.forEach { task ->
                 OutlinedTextField(times[task.key]?:defaults,{times=times+(task.key to it)},label={Text("${task.title} · HH:mm (opcional)")},modifier=Modifier.fillMaxWidth(),singleLine=true)
             }
             Text("Las horas y las alarmas son opcionales. Puedes iniciar la jornada sin configurarlas.",style=MaterialTheme.typography.bodySmall)

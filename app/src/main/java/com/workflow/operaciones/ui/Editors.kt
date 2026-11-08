@@ -72,6 +72,7 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
     var expected by rememberSaveable(original.id) { mutableStateOf(original.expected) }
     var actual by rememberSaveable(original.id) { mutableStateOf(original.actual) }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var details by rememberSaveable(original.id) { mutableStateOf(original.time.isNotBlank() || original.notes.isNotBlank() || original.expected.isNotBlank() || original.actual.isNotBlank()) }
     val kind = original.module
     fun persist(another: Boolean) {
         try {
@@ -101,9 +102,11 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
         Options("Estado", status, Rules.statuses.getValue(kind)) { status = it }
         if (kind in listOf(Module.ATTENDANCE, Module.PLAN, Module.TICKET, Module.POSITION, Module.FUEL, Module.FAULT)) {
             val optional = kind in listOf(Module.FUEL, Module.FAULT)
+            if(!optional) {
             Choice("Operador${if (optional) " (opcional)" else ""}", opId,
                 (if (optional) listOf("" to "Sin asignar") else emptyList()) + vm.operators.map { it.id to it.displayLabel }) { opId = it }
             if (vm.operators.isEmpty()) { Text("Necesitas añadir un operador para continuar."); if (addMaster != null) TextButton(onClick = { addMaster("operator") }) { Text("Añadir operador") } }
+            }
         }
         if (kind in listOf(Module.ATTENDANCE, Module.PLAN, Module.POSITION)) Options("Turno real", shift, Rules.shifts) { shift = it }
         if (kind == Module.ATTENDANCE) {
@@ -130,13 +133,23 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
                 }
             }
         }
-        OutlinedTextField(time, { time = it }, label = { Text(if (kind == Module.TASK) "Hora de la tarea · HH:mm (opcional)" else "Hora aproximada HH:mm (opcional)") }, modifier = Modifier.fillMaxWidth().testTag("operation-time"), singleLine = true)
-        OutlinedTextField(notes, { notes = it }, label = { Text(if (kind == Module.CLOSE) "Pendientes y excepciones del cierre" else "Detalles / seguimiento / resolución") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("operation-notes"))
+        if(kind in listOf(Module.FAULT,Module.CLOSE))OutlinedTextField(notes, { notes = it }, label = { Text(if (kind == Module.CLOSE) "Pendientes y excepciones del cierre" else "Detalles / seguimiento / resolución") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("operation-notes"))
         if (kind == Module.TICKET) {
             Options("Nivel de la infracción", severity, listOf("Leve", "Moderada", "Grave")) { severity = it }
+        }
+        TextButton(onClick={details=!details},modifier=Modifier.fillMaxWidth().testTag("operation-more")) { Text(if(details)"Ocultar detalles opcionales" else "Añadir detalles opcionales") }
+        if(details) {
+        OutlinedTextField(time, { time = it }, label = { Text(if (kind == Module.TASK) "Hora de la tarea · HH:mm (opcional)" else "Hora aproximada HH:mm (opcional)") }, modifier = Modifier.fillMaxWidth().testTag("operation-time"), singleLine = true)
+        if(kind !in listOf(Module.FAULT,Module.CLOSE))OutlinedTextField(notes, { notes = it }, label = { Text("Detalles / seguimiento / resolución") }, minLines = 3, modifier = Modifier.fillMaxWidth().testTag("operation-notes"))
+        if(kind in listOf(Module.FUEL,Module.FAULT)) {
+            Choice("Operador (opcional)",opId,listOf("" to "Sin asignar")+vm.operators.map{it.id to it.displayLabel}){opId=it}
+            if(vm.operators.isEmpty())Text("Puedes guardar este registro sin asignar un operador.",style=MaterialTheme.typography.bodySmall)
+        }
+        if (kind == Module.TICKET) {
             OutlinedTextField(expected, { expected = it }, label = { Text("Objetivo esperado (opcional)") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(actual, { actual = it }, label = { Text("Resultado real (opcional)") }, modifier = Modifier.fillMaxWidth())
             Text("Responsable: ${original.recordedBy.ifBlank { vm.document?.supervisor.orEmpty() }}. El ticket no acredita por sí solo una sanción oficial.")
+        }
         }
         if (kind == Module.CLOSE) {
             Text("${vm.document?.let { DailySummary.pending(it).size } ?: 0} pendientes al cierre del día. Cerrar no los elimina. Reabre la jornada para corregir registros.")

@@ -201,6 +201,9 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
             state = screenScroll,
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if(doc.day!=LocalDate.now().toString())item {
+                TextButton(onClick={vm.chooseDay(LocalDate.now().toString())},modifier=Modifier.testTag("back-to-today")){Text("Viendo ${doc.day} · Volver a hoy")}
+            }
             if(unfinishedDays.isNotEmpty())item {
                 WFCard(Modifier.fillMaxWidth(),Brand.Sand) {
                     Text("Hay jornadas anteriores pendientes",style=MaterialTheme.typography.titleSmall)
@@ -484,10 +487,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
             }
         }, confirmButton = { TextButton(onClick = { mealPreview = false }) { Text("Cerrar") } })
     }
-    if (dateDialog) {
-        var date by remember { mutableStateOf(vm.day) }
-        SafeAlertDialog(onDismissRequest = { dateDialog = false }, title = { Text("Fecha de trabajo") }, text = { OutlinedTextField(date, { date = it }, label = { Text("AAAA-MM-DD") }) }, confirmButton = { TextButton(onClick = { vm.chooseDay(date); dateDialog = false }) { Text("Ver fecha") } }, dismissButton = { TextButton(onClick = { dateDialog = false }) { Text("Cancelar") } })
-    }
+    if (dateDialog) WorkDatePicker(vm.day,{dateDialog=false}){vm.chooseDay(it);dateDialog=false}
     if (startDay) StartDayDialog(vm) { startDay = false }
     if (alarmSettings) AgendaSettingsDialog(vm) { alarmSettings = false }
     reportOptions?.let { initial -> ReportOptionsDialog(initial, vm, close = { reportOptions = null }, show = { visualReport = it }) }

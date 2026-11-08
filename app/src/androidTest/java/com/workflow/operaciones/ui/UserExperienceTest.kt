@@ -4,6 +4,11 @@ import android.content.ContentValues
 import android.graphics.Bitmap
 import android.provider.MediaStore
 import android.view.WindowManager
+import android.view.View
+import android.view.ViewGroup
+import android.view.inspector.WindowInspector
+import android.widget.DatePicker
+import android.widget.Button
 import androidx.activity.compose.setContent
 import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.*
@@ -38,9 +43,9 @@ class UserExperienceTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
     private lateinit var db: WorkflowDatabase
     private lateinit var model: WorkflowViewModel
-    private fun prepare() {
+    private fun prepare(defaultTime: String = "09:00") {
         db = Room.inMemoryDatabaseBuilder(context, WorkflowDatabase::class.java).build()
-        compose.activityRule.scenario.onActivity { model = WorkflowViewModel(WorkflowRepository(context, db, com.workflow.operaciones.data.TestAgendaAccess())); model.shareAfterSave = false }
+        compose.activityRule.scenario.onActivity { model = WorkflowViewModel(WorkflowRepository(context, db, com.workflow.operaciones.data.TestAgendaAccess(defaultTime))); model.shareAfterSave = false }
         compose.waitUntil(60_000) { !model.busy && model.document != null }
     }
     private fun show(content: @Composable () -> Unit) {
@@ -88,11 +93,63 @@ class UserExperienceTest {
         val open=mutableStateOf(true)
         val task=Operation(day=model.day,module=Module.TASK,title="Tarea sin alarma",status="Pendiente")
         show { if(open.value)OperationEditor(task,model){open.value=false} else Text("Tarea guardada") }
+        compose.onNodeWithTag("operation-time").assertDoesNotExist()
+        compose.onNodeWithTag("operation-more").performScrollTo().performClick()
         field("operation-time","")
         tap("dialog-confirm")
         compose.waitUntil(30_000){!model.busy&&!open.value}
         assertEquals("",model.document!!.operations.single{it.id==task.id}.time)
         assertEquals("Pendiente",model.document!!.operations.single{it.id==task.id}.status)
+    }
+    @Test fun a_task_saves_using_only_its_essential_fields() {
+        prepare("")
+        val open=mutableStateOf(true)
+        val task=Operation(day=model.day,module=Module.TASK,title="Actividad sin detalles",status="Pendiente")
+        show { if(open.value)OperationEditor(task,model){open.value=false} else Text("Actividad guardada") }
+        compose.onNodeWithTag("operation-notes").assertDoesNotExist()
+        compose.onNodeWithTag("operation-time").assertDoesNotExist()
+        tap("dialog-confirm")
+        compose.waitUntil(30_000){!model.busy&&!open.value}
+        assertEquals("",model.document!!.operations.single{it.id==task.id}.time)
+        assertEquals("",model.document!!.operations.single{it.id==task.id}.notes)
+    }
+    private fun nativeCalendar(view:View):DatePicker? {
+        if(view is DatePicker)return view
+        if(view is ViewGroup)for(i in 0 until view.childCount)nativeCalendar(view.getChildAt(i))?.let{return it}
+        return null
+    }
+    @Test fun a_date_is_chosen_from_the_native_calendar_without_typing() {
+        prepare()
+        val selected=mutableStateOf("2026-11-07")
+        show { WorkDateField("Desde",selected.value,"calendar-field"){selected.value=it} }
+        tap("calendar-field")
+        compose.waitUntil(10_000){compose.runOnIdle{WindowInspector.getGlobalWindowViews().any{nativeCalendar(it)!=null}}}
+        compose.runOnIdle {
+            val roots=WindowInspector.getGlobalWindowViews()
+            val picker=requireNotNull(roots.firstNotNullOfOrNull{nativeCalendar(it)})
+            picker.updateDate(2026,10,8)
+            requireNotNull(roots.firstNotNullOfOrNull{it.findViewById<Button>(android.R.id.button1)}).performClick()
+        }
+        compose.waitUntil(10_000){selected.value=="2026-11-08"}
+        compose.onNodeWithTag("calendar-field").assertIsDisplayed()
+    }
+    @Test fun report_filters_are_optional_and_week_preset_works_without_manual_dates() {
+        prepare()
+        val open=mutableStateOf(true)
+        var query:ReportQuery?=null
+        show { if(open.value)ReportOptionsDialog(ReportQuery(ReportType.GENERAL,model.day),model,{open.value=false},{query=it}) else Text("Consulta preparada") }
+        compose.onNodeWithText("Todos los operadores").assertDoesNotExist()
+        tap("report-filters")
+        compose.onNodeWithText("Todos los operadores").assertIsDisplayed()
+        tap("report-filters")
+        compose.onNodeWithText("Todos los operadores").assertDoesNotExist()
+        compose.onNodeWithText("Semana").performClick()
+        tap("report-generate")
+        compose.waitUntil(10_000){!open.value}
+        val start=java.time.LocalDate.parse(model.day).with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+        assertEquals(start.toString(),query!!.from)
+        assertEquals(start.plusDays(6).toString(),query!!.to)
+        assertNull(query!!.operatorId)
     }
     @Test fun multiple_catalog_entries_stay_in_the_form_and_employee_codes_are_optional() {
         prepare()

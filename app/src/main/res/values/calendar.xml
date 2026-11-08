@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.WorkFlow.Calendar" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">#163B43</item>
+        <item name="android:fontFamily">@font/nunito_regular</item>
+    </style>
+</resources>
