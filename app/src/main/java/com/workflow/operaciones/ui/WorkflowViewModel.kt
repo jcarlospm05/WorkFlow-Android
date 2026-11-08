@@ -120,12 +120,12 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
     fun requestTransferSetup() { pendingOutgoing = null; transferKeyError = null; needsTransferSetup = true }
     fun dismissTransferSetup() { pendingOutgoing = null; transferKeyError = null; needsTransferSetup = false }
     private suspend fun send(context: Context, outgoing: Outgoing) {
-        val files = withContext(Dispatchers.IO) {
-            val protected = if (outgoing.kind != ShareKind.REPORT) {
+        val files: List<java.io.File>? = withContext(Dispatchers.IO) {
+            val protected: java.io.File? = if (outgoing.kind != ShareKind.REPORT) {
                 val password = repository.transferKeys.read()
                 if(password==null) null else try { Reports.protectedReport(context,outgoing.report,password) } finally { password.fill('\u0000') }
             } else null
-            if(outgoing.kind!=ShareKind.REPORT && protected==null) null else buildList {
+            if(outgoing.kind!=ShareKind.REPORT && protected==null) null else buildList<java.io.File> {
                 if(outgoing.kind!=ShareKind.PROGRESS) {
                     val query=ReportQuery(if(outgoing.kind==ShareKind.CLOSE)ReportType.CLOSE else ReportType.GENERAL,outgoing.report.day)
                     add(Reports.pdf(context,ReportBuilder.build(query,listOf(outgoing.report))))

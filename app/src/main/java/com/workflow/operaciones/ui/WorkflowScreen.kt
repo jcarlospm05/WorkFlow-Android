@@ -133,13 +133,14 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
         catalog = null; pendingOverview = false
         tab = 2; module = which
     }
+    LaunchedEffect(module,catalog) { if(module==Module.STOCK)module=null;if(catalog=="item")catalog=null }
     fun captureFormRoute() { formTab = tab; formModule = module; formCatalog = catalog; formDay = vm.day; formVisible = true }
     fun openOperation(op: Operation) { captureFormRoute(); editor = op; master = null }
     fun executeTask(op: Operation) {
         if(op.module!=Module.TASK) { openOperation(op);return }
         val target=TaskRouting.destination(op,vm.document?.operations.orEmpty())
         openModule(target)
-        if(target==Module.MEAL) mealType=if(op.templateKey=="lunch")"Almuerzo" else "Cena"
+        if(target==Module.MEAL) mealType=if(op.templateKey=="lunch")"Almuerzo" else op.mealType
     }
     fun openEvent(op: Operation) { visualReport = ReportQuery(if (op.module == Module.TICKET) ReportType.TICKET else ReportType.EVENT, op.day, operationId = op.id) }
     fun newMaster(kind: String) { captureFormRoute(); editOperator = null; editAsset = null; editItem = null; master = kind; masterDraftKey = java.util.UUID.randomUUID().toString() }

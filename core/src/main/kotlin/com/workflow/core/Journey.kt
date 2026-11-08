@@ -54,7 +54,7 @@ object DayTemplates {
         Rules.day(day)
         require(keys.all { key -> all.any { it.key == key } })
         return all.filter { it.key in keys }.map {
-            Operation(day = day, module = Module.TASK, title = it.title, status = "Pendiente", templateKey = it.key, targetModule = TaskRouting.templateModule(it.key))
+            Operation(day = day, module = Module.TASK, title = it.title, status = "Pendiente", templateKey = it.key, targetModule = TaskRouting.templateModule(it.key), mealType = if(it.key=="lunch")"Almuerzo"else "Cena")
         }
     }
 }

@@ -11,6 +11,7 @@ class OperationalFlowTest {
     @Test fun every_template_has_a_module_and_inventory_is_not_available() {
         val tasks=DayTemplates.operations(day,DayTemplates.all.map{it.key}.toSet())
         assertEquals(listOf(Module.MEAL,Module.MEAL,Module.FUEL,Module.FUEL,Module.TASK,Module.TASK),tasks.map{TaskRouting.destination(it)})
+        assertEquals("Almuerzo",tasks.single{it.templateKey=="lunch"}.mealType)
         assertFalse(Module.STOCK in TaskRouting.modules)
         assertFalse(ReportGuide.topics.any{it.type==ReportType.STOCK})
     }
