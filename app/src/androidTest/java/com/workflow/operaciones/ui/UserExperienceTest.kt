@@ -172,7 +172,8 @@ class UserExperienceTest {
         show { WorkflowScreen(model) }
         tap("nav-3")
         compose.onNodeWithTag("report-topic-GENERAL").assertExists()
-        compose.onNodeWithTag("report-more-topics").performScrollTo().performClick()
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasTestTag("report-more-topics"))
+        compose.onNodeWithTag("report-more-topics").performClick()
         compose.onNodeWithTag("workflow-list").performScrollToNode(hasTestTag("report-topic-DAYS_OFF"))
         compose.onNodeWithTag("report-topic-DAYS_OFF").assertIsDisplayed()
     }
