@@ -243,7 +243,15 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                         MetricTile(doc.assets.count { it.state in listOf("En taller","Inactivo temporal") }.toString(), "En taller", Icons.Outlined.Build, Brand.Sand, Modifier.weight(1f).testTag("dashboard-workshop"), onClick = { openModule(Module.FAULT) })
                     } }
                     item { Text("Accesos rápidos", style = MaterialTheme.typography.titleMedium) }
-                    item { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) { listOf(Module.ATTENDANCE,Module.MEAL,Module.FUEL,Module.FAULT).chunked(2).forEach { row -> Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){row.forEach { entry -> QuickAction(moduleIcon(entry),entry.label,Modifier.weight(1f)){openModule(entry)} }} } }
+                    item {
+                        Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                            listOf(Module.ATTENDANCE,Module.MEAL,Module.FUEL,Module.FAULT).chunked(2).forEach { row ->
+                                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                                    row.forEach { entry -> QuickAction(moduleIcon(entry),entry.label,Modifier.weight(1f)){openModule(entry)} }
+                                }
+                            }
+                        }
+                    }
                     item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text("Próximas tareas", style = MaterialTheme.typography.titleMedium); TextButton(onClick = { tab = 1 }) { Text("Ver agenda") } } }
                     item { WFCard(Modifier.fillMaxWidth()) {
                         val upcoming = tasks.filter { it.status != "Completada" }.sortedBy { it.time }.take(3)

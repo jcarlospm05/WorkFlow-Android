@@ -82,7 +82,10 @@ internal fun copyReportText(context: Context, text: String) {
                 if(asImages) {
                     val readyImages=images.ifEmpty{withContext(Dispatchers.IO){Reports.images(context,readyPdf)}}
                     images=readyImages;Reports.share(context,readyImages,!otherApps)
-                } else Reports.share(context,readyPdf,!otherApps)
+                } else {
+                    val tables=withContext(Dispatchers.IO){Reports.csv(context,query,documents)}
+                    Reports.share(context,listOf(readyPdf)+tables,!otherApps)
+                }
                 sharing=false
             } catch(e:CancellationException){throw e}
             catch(_:Exception){error="No se pudo preparar el archivo. Revisa el espacio disponible e inténtalo de nuevo."}
@@ -142,7 +145,7 @@ internal fun copyReportText(context: Context, text: String) {
             Button(onClick={Reports.shareText(context,report.text(),!otherApps);sharing=false},modifier=Modifier.fillMaxWidth()){Text("Listado de texto")}
             OutlinedButton(onClick={shareFile(true)},enabled=!preparing,modifier=Modifier.fillMaxWidth()){Text(if(images.size>1)"Imágenes JPG · ${images.size} páginas"else "Imagen JPG")}
             OutlinedButton(onClick={shareCsv()},enabled=!preparing,modifier=Modifier.fillMaxWidth()){Text("Tablas CSV para Excel")}
-            OutlinedButton(onClick={shareFile(false)},enabled=!preparing,modifier=Modifier.fillMaxWidth()){Text("Documento PDF")}
+            OutlinedButton(onClick={shareFile(false)},enabled=!preparing,modifier=Modifier.fillMaxWidth()){Text("Informe · PDF y CSV")}
             Row { Checkbox(otherApps,{otherApps=it},enabled=!preparing);Text("Elegir otra aplicación") }
             if(!otherApps)Text("Se abrirá WhatsApp para que elijas el destinatario.",style=MaterialTheme.typography.bodySmall)
         }

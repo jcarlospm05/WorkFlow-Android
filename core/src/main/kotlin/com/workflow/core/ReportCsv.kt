@@ -19,8 +19,9 @@ object ReportCsv {
         val docs=documents.sortedBy { it.day }
         val people=docs.flatMap { it.operators }.associateBy { it.id }
         val assets=docs.flatMap { it.assets }.associateBy { it.id }
-        if(query.type==ReportType.OPERATORS) return listOf(CsvTable("Personal",listOf("ID","Codigo","Nombre","Turno","Activo"),people.values.filter { query.operatorId==null || it.id==query.operatorId }.map { listOf(it.id,it.code,it.name,it.shift,it.active.toString()) }))
-        if(query.type==ReportType.ASSETS) return listOf(CsvTable("Equipos",listOf("ID","Codigo","Tipo","Estado"),assets.values.filter { query.assetId==null || it.id==query.assetId }.filter { query.status==null || it.state==query.status }.map { listOf(it.id,it.code,it.type,it.state) }))
+        val latest=docs.lastOrNull { it.day in query.from..query.to }
+        if(query.type==ReportType.OPERATORS) return listOf(CsvTable("Personal",listOf("ID","Codigo","Nombre","Turno","Activo"),(latest?.operators?:people.values.toList()).filter { query.operatorId==null || it.id==query.operatorId }.map { listOf(it.id,it.code,it.name,it.shift,it.active.toString()) }))
+        if(query.type==ReportType.ASSETS) return listOf(CsvTable("Equipos",listOf("ID","Codigo","Tipo","Estado"),(latest?.assets?:assets.values.toList()).filter { query.assetId==null || it.id==query.assetId }.filter { query.status==null || it.state==query.status }.map { listOf(it.id,it.code,it.type,it.state) }))
         val allowed=when(query.type) {
             ReportType.GENERAL,ReportType.CLOSE -> Module.entries.filter { it!=Module.STOCK }
             ReportType.ATTENDANCE,ReportType.ABSENCE,ReportType.SUNDAY -> listOf(Module.ATTENDANCE)
