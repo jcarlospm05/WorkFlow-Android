@@ -90,10 +90,10 @@ object ImportPolicy {
 }
 
 object DailySummary {
-    fun present(d: DailyDocument): Int = d.operations.filter { it.module == Module.ATTENDANCE && it.status in listOf("Presente", "Tardanza") }.mapNotNull { it.operatorId }.distinct().size
+    fun present(d: DailyDocument): Int = AttendanceList.latest(d.operations).filter { it.status in listOf("Presente", "Tardanza") }.mapNotNull { it.operatorId }.distinct().size
     fun pending(d: DailyDocument): List<Operation> {
-        val records = d.operations + d.carryOverFaults
-        val pending = records.filter { it.status in listOf("Pendiente", "Abierta", "En proceso", "Borrador") }
+        val records = (d.operations + d.carryOverFaults).filter { it.module != Module.STOCK }
+        val pending = records.filter { it.status in listOf("Pendiente", "Abierta", "En proceso", "Borrador", "Preparada") }
         val represented = pending.filter { it.module == Module.TASK }.mapNotNull { it.sourceId }.toSet()
         return pending.filter { it.id !in represented }.distinctBy { it.id }
     }

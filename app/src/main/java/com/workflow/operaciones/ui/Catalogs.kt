@@ -28,29 +28,31 @@ internal fun LazyListScope.catalogRows(
             Button(onClick = onAdd, enabled = !vm.busy, modifier = Modifier.testTag("catalog-add")) { Icon(Icons.Outlined.Add, null); Text(addLabel) }
         }
     }
-    item { OutlinedTextField(search, onSearch, label = { Text("Buscar en ${title.lowercase()}") }, leadingIcon = { Icon(Icons.Outlined.Search, null) }, modifier = Modifier.fillMaxWidth().testTag("catalog-search"), singleLine = true) }
+    item { OutlinedTextField(if(search.startsWith("@"))""else search, onSearch, label = { Text("Buscar en ${title.lowercase()}") }, leadingIcon = { Icon(Icons.Outlined.Search, null) }, modifier = Modifier.fillMaxWidth().testTag("catalog-search"), singleLine = true) }
     when (kind) {
         "operator" -> {
             val rows = vm.operators.filter { search.isBlank() || it.displayLabel.contains(search, true) }.sortedBy { it.name.lowercase() }
             if (rows.isEmpty()) item { Text(if (search.isBlank()) "Añade al primer operador para empezar." else "No encontramos operadores con esa búsqueda.") }
             items(rows, key = { it.id }) { operator ->
-                WFCard(Modifier.fillMaxWidth().clickable(role = Role.Button) { editOperator(operator) }.testTag("catalog-record-${operator.id}")) {
+                Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { editOperator(operator) }.testTag("catalog-record-${operator.id}").padding(vertical=4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        WFIcon(Icons.Outlined.Person, Brand.Sage)
-                        Column(Modifier.weight(1f)) { Text(operator.name, style = MaterialTheme.typography.titleSmall); if (operator.code.isNotBlank()) Text(operator.code, style = MaterialTheme.typography.bodyMedium); Text(if (operator.active) operator.shift else "Inactivo", color = Brand.SecondaryText) }
+                        Icon(Icons.Outlined.Person,null,tint=Brand.Teal)
+                        Column(Modifier.weight(1f)) { Text(operator.name, style = MaterialTheme.typography.titleSmall); if (operator.code.isNotBlank()) Text(operator.code, style = MaterialTheme.typography.bodyMedium); Text(if(operator.active)"Activo"else"Inactivo",style=MaterialTheme.typography.bodySmall,color=Brand.SecondaryText) }
                         Icon(Icons.Outlined.ChevronRight, "Editar operador")
                     }
                 }
             }
         }
         "asset" -> {
-            val rows = vm.assets.filter { search.isBlank() || "${it.code} ${it.type}".contains(search, true) }
+            val activeOnly=search=="@activos"
+            item { PillTabs(listOf("Todos","Activos","En taller"),when(search){"@activos"->"Activos";"@taller"->"En taller";else->"Todos"}){onSearch(when(it){"Activos"->"@activos";"En taller"->"@taller";else->""})} }
+            val rows = vm.assets.filter { when(search){"@activos"->it.state=="Activo";"@taller"->it.state in listOf("En taller","Inactivo temporal");else->search.isBlank() || "${it.code} ${it.type}".contains(search,true)} }
             if (rows.isEmpty()) item { Text(if (search.isBlank()) "Añade el primer equipo para empezar." else "No encontramos equipos con esa búsqueda.") }
             items(rows, key = { it.id }) { asset ->
-                WFCard(Modifier.fillMaxWidth().clickable(role = Role.Button) { editAsset(asset) }) {
+                Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { editAsset(asset) }.padding(vertical=4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        WFIcon(Icons.Outlined.LocalShipping)
-                        Column(Modifier.weight(1f)) { Text(asset.code, style = MaterialTheme.typography.titleSmall); Text(asset.type, color = Brand.SecondaryText); WFStatus(asset.state) }
+                        Icon(Icons.Outlined.LocalShipping,null,tint=Brand.Teal)
+                        Column(Modifier.weight(1f)) { Text(asset.code, style = MaterialTheme.typography.titleSmall); Text(asset.type, color = Brand.SecondaryText); Text(asset.state,style=MaterialTheme.typography.labelMedium,color=if(asset.state in listOf("Inactivo temporal","En taller"))Brand.Red else Brand.SecondaryText) }
                         Icon(Icons.Outlined.ChevronRight, "Editar equipo")
                     }
                 }

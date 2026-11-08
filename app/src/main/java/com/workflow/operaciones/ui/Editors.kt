@@ -28,7 +28,7 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = close, enabled = !busy, modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("dialog-cancel")) { Text("Cerrar") }
                 val buttonModifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("dialog-confirm")
-                if (saveAnother != null) OutlinedButton(onClick = save, enabled = !busy, modifier = buttonModifier) { Text("Guardar y cerrar") }
+                if (saveAnother != null) OutlinedButton(onClick = save, enabled = !busy, modifier = buttonModifier) { Text("Guardar") }
                 else Button(onClick = save, enabled = !busy, modifier = buttonModifier) { Text(if (busy) "Guardando…" else saveLabel) }
             }
         }
@@ -58,6 +58,7 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
     LaunchedEffect(savedCount) { if (savedCount > 0) titleFocus.requestFocus() }
     var title by rememberSaveable(original.id) { mutableStateOf(original.title) }
     var status by rememberSaveable(original.id) { mutableStateOf(if (original.module == Module.CLOSE && vm.document?.operations?.any { it.module == Module.CLOSE && it.status == "Cerrada" } == true) "Reabierta" else original.status) }
+    var targetModule by rememberSaveable(original.id) { mutableStateOf(TaskRouting.destination(original,vm.document?.operations.orEmpty())) }
     var opId by rememberSaveable(original.id) { mutableStateOf(original.operatorId.orEmpty()) }
     var assetId by rememberSaveable(original.id) { mutableStateOf(original.assetId.orEmpty()) }
     var itemId by rememberSaveable(original.id) { mutableStateOf(original.itemId.orEmpty()) }
@@ -78,7 +79,7 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
         try {
             require(title.isNotBlank()) { "Escribe una descripción para el registro" }
             val number = if (quantity.isBlank()) 0.0 else quantity.replace(',', '.').toDoubleOrNull() ?: throw IllegalArgumentException("Cantidad inválida")
-            val operation = original.copy(id = draftId, title = title.trim(), status = status, operatorId = opId.ifEmpty { null }, assetId = assetId.ifEmpty { null }, itemId = itemId.ifEmpty { null }, operatorIds = selected.toList().sorted(), shift = shift, mealType = mealType, extended = ext, quantity = number, time = time.trim(), notes = notes.trim(), resolvedAt = if (kind == Module.FAULT && status != "Cerrada") "" else original.resolvedAt, severity = severity, expected = expected.trim(), actual = actual.trim(), recordedBy = original.recordedBy.ifBlank { vm.document?.supervisor.orEmpty() })
+            val operation = original.copy(targetModule = if(kind==Module.TASK)targetModule else original.targetModule, id = draftId, title = title.trim(), status = status, operatorId = opId.ifEmpty { null }, assetId = assetId.ifEmpty { null }, itemId = itemId.ifEmpty { null }, operatorIds = selected.toList().sorted(), shift = shift, mealType = mealType, extended = ext, quantity = number, time = time.trim(), notes = notes.trim(), resolvedAt = if (kind == Module.FAULT && status != "Cerrada") "" else original.resolvedAt, severity = severity, expected = expected.trim(), actual = actual.trim(), recordedBy = original.recordedBy.ifBlank { vm.document?.supervisor.orEmpty() })
             Rules.operation(operation, vm.operators, vm.assets, vm.items)
             if (kind == Module.CLOSE && status == "Cerrada" && DailySummary.pending(vm.document!!).isNotEmpty()) require(notes.isNotBlank()) { "Explica los pendientes del cierre del día" }
             if (isNew) require(vm.document?.operations?.none { it.id == draftId } != false) { "Este registro ya está guardado. Cierra el formulario y pulsa Añadir para crear otro." }
@@ -95,10 +96,11 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
     }
     val canAddAnother = isNew && kind !in listOf(Module.MEAL, Module.CLOSE)
     EditorFrame("${if (kind == Module.CLOSE) "Cierre del día" else kind.label} · ${original.day}", vm.busy, onDismiss, save = { persist(false) },
-        saveAnother = if (canAddAnother) ({ persist(true) }) else null, saveLabel = if (isNew) "Guardar" else "Guardar cambios") {
+        saveAnother = if (canAddAnother) ({ persist(true) }) else null, saveLabel = "Guardar") {
         Text(if (savedCount > 0) "Registro guardado. Puedes añadir el siguiente." else "Los cambios se guardan en tu informe del día.", style = MaterialTheme.typography.bodyMedium)
         (error ?: vm.actionError)?.let { Text(it, color = Brand.Red) }
         OutlinedTextField(title, { title = it }, label = { Text(if (kind == Module.TICKET) "Motivo de la infracción" else "Título / descripción breve") }, modifier = Modifier.fillMaxWidth().focusRequester(titleFocus).testTag("operation-title"))
+        if(kind==Module.TASK)Choice("Módulo donde se realiza",targetModule.name,TaskRouting.modules.map{it.name to TaskRouting.label(it)}){targetModule=Module.valueOf(it)}
         Options("Estado", status, Rules.statuses.getValue(kind)) { status = it }
         if (kind in listOf(Module.ATTENDANCE, Module.PLAN, Module.TICKET, Module.POSITION, Module.FUEL, Module.FAULT)) {
             val optional = kind in listOf(Module.FUEL, Module.FAULT)
@@ -108,7 +110,7 @@ internal val LocalInlineEditor = staticCompositionLocalOf { false }
             if (vm.operators.isEmpty()) { Text("Necesitas añadir un operador para continuar."); if (addMaster != null) TextButton(onClick = { addMaster("operator") }) { Text("Añadir operador") } }
             }
         }
-        if (kind in listOf(Module.ATTENDANCE, Module.PLAN, Module.POSITION)) Options("Turno real", shift, Rules.shifts) { shift = it }
+        if (kind in listOf(Module.PLAN, Module.POSITION)) Options("Turno real", shift, Rules.shifts) { shift = it }
         if (kind == Module.ATTENDANCE) {
             Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(ext, { ext = it }); Text("EXT · Jornada extendida") }
             Text("Tardanza cuenta como presente. Libre no es ausencia. Una persona en varios turnos cuenta una sola vez en presentes únicos.", style = MaterialTheme.typography.bodyMedium)

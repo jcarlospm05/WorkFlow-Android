@@ -81,7 +81,7 @@ object ReportBuilder {
         val operators = docs.flatMap { it.operators }.associateBy { it.id }
         val assets = docs.flatMap { it.assets }.associateBy { it.id }
         val items = docs.flatMap { it.items }.associateBy { it.id }
-        val all = docs.flatMap { it.operations + it.carryOverFaults }.associateBy { it.id }.values.toList()
+        val all = AttendanceList.normalized(docs.flatMap { it.operations + it.carryOverFaults }.associateBy { it.id }.values.toList()).filter { it.module != Module.STOCK }
         val rows = all.filter { op -> op.day in query.from..query.to || (query.type in listOf(ReportType.GENERAL, ReportType.CLOSE, ReportType.WORKSHOP, ReportType.ASSET_HISTORY) && op.module == Module.FAULT && op.day <= query.to && (op.status != "Cerrada" || (op.resolvedAt.isNotBlank() && java.time.Instant.parse(op.resolvedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString() >= query.from))) }
             .filter { query.operatorId == null || it.operatorId == query.operatorId || query.operatorId in it.operatorIds }
             .filter { query.assetId == null || it.assetId == query.assetId }
@@ -132,7 +132,7 @@ object ReportBuilder {
                     listOf("Abastecimientos pendientes","${rows.count{it.module==Module.FUEL&&it.status=="Pendiente"}}"),
                     listOf("Equipos con averías sin resolver","${rows.filter{it.module==Module.FAULT&&it.status!="Cerrada"}.mapNotNull{it.assetId}.distinct().size}")
                 ))
-                sections += ReportSection("Estado por módulo", listOf("Módulo", "Registros", "Pendientes"), Module.entries.filter { it != Module.CLOSE }.map { module ->
+                sections += ReportSection("Estado por módulo", listOf("Módulo", "Registros", "Pendientes"), Module.entries.filter { it !in listOf(Module.CLOSE, Module.STOCK) }.map { module ->
                     val data = rows.filter { it.module == module }
                     listOf(module.label, "${data.size}", "${data.count { it.status in listOf("Pendiente", "Abierta", "En proceso", "Borrador", "Preparada") }}")
                 })
@@ -141,7 +141,14 @@ object ReportBuilder {
                     val closes = rows.filter { it.module == Module.CLOSE }
                     sections += recordTable("Cierres y excepciones", closes)
                     sections += recordTable("Pendientes que permanecen abiertos", rows.filter { it.status in listOf("Pendiente", "Abierta", "En proceso", "Borrador") })
-                } else sections += recordTable("Novedades de la operación", rows.filter { it.module !in listOf(Module.TASK, Module.CLOSE) })
+                }
+                Module.entries.filter { it !in listOf(Module.STOCK,Module.TASK,Module.CLOSE) }.forEach { module ->
+                    val entries=rows.filter{it.module==module}
+                    if(entries.isNotEmpty()) {
+                        if(module==Module.MEAL)sections += ReportSection("Comidas",listOf("Fecha","Comida","Operador","Estado"),entries.flatMap { meal -> mealNames(meal).map { name -> listOf(date(meal.day),meal.mealType,name,meal.status) } })
+                        else sections += recordTable(module.label,entries)
+                    }
+                }
             }
             ReportType.WEEK, ReportType.MONTH -> {
                 val representedPlans = rows.filter { it.module == Module.TASK }.mapNotNull { it.sourceId }.toSet()
@@ -268,7 +275,7 @@ object ReportBuilder {
                 sections += ReportSection("Personal", listOf("Operador", "Código opcional", "Turno", "Estado"), selected.map { listOf(it.name, it.code.ifBlank { "Sin código" }, it.shift, if (it.active) "Activo" else "Inactivo") })
             }
             ReportType.ASSETS -> {
-                val selected = (inRange.lastOrNull()?.assets ?: assets.values.toList()).filter { query.assetId == null || it.id == query.assetId }
+                val selected = (inRange.lastOrNull()?.assets ?: assets.values.toList()).filter { query.assetId == null || it.id == query.assetId }.filter { query.status == null || it.state == query.status }
                 metrics += listOf(ReportMetric("${selected.size}", "Equipos registrados"), ReportMetric("${selected.count { it.state == "Activo" }}", "Activos", "sage"), ReportMetric("${selected.count { it.state in listOf("En taller", "Inactivo temporal") }}", "En taller", "rose"))
                 if (selected.isNotEmpty()) sections += ReportSection("Disponibilidad de equipos", chart = selected.groupBy { it.state }.map { ChartValue(it.key, it.value.size.toDouble(), statusTone(it.key)) }, donut = true)
                 sections += ReportSection("Estado de la flota", listOf("Equipo", "Tipo", "Estado"), selected.map { listOf(it.code, it.type, it.state) })

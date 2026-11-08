@@ -54,7 +54,7 @@ object DayTemplates {
         Rules.day(day)
         require(keys.all { key -> all.any { it.key == key } })
         return all.filter { it.key in keys }.map {
-            Operation(day = day, module = Module.TASK, title = it.title, status = "Pendiente", templateKey = it.key)
+            Operation(day = day, module = Module.TASK, title = it.title, status = "Pendiente", templateKey = it.key, targetModule = TaskRouting.templateModule(it.key))
         }
     }
 }
@@ -80,6 +80,35 @@ object LinkedTasks {
             else -> op.status in listOf("Libre confirmado", "Libre disfrutado")
         }
         return (previous ?: Operation(day = op.day, module = Module.TASK, title = title, status = "Pendiente", sourceId = op.id))
-            .copy(sourceId = op.id, title = title, status = if (completed) "Completada" else "Pendiente", time = op.time.ifBlank { previous?.time.orEmpty() }, assetId = op.assetId, operatorId = op.operatorId, updatedAt = op.updatedAt)
+            .copy(targetModule = op.module, sourceId = op.id, title = title, status = if (completed) "Completada" else "Pendiente", time = op.time.ifBlank { previous?.time.orEmpty() }, assetId = op.assetId, operatorId = op.operatorId, updatedAt = op.updatedAt)
     }
+}
+
+/** Every task has one operational destination; old templates remain routable. */
+object TaskRouting {
+    val modules = Module.entries.filter { it !in listOf(Module.STOCK, Module.CLOSE) }
+    fun label(module: Module) = if (module == Module.TASK) "Gestiones" else module.label
+    fun templateModule(key: String): Module = when(key) {
+        "dinner", "lunch" -> Module.MEAL
+        "fuel-crane", "fuel-mule" -> Module.FUEL
+        "workshop-review" -> Module.FAULT
+        else -> Module.TASK
+    }
+    fun destination(task: Operation, operations: List<Operation> = emptyList()): Module =
+        task.targetModule ?: operations.firstOrNull { it.id == task.sourceId }?.module
+        ?: templateModule(task.templateKey)
+    fun pending(doc: DailyDocument, module: Module): List<Operation> {
+        val tasks = doc.operations.filter { it.module == Module.TASK && it.status != "Completada" && destination(it,doc.operations) == module }
+        val sources = tasks.mapNotNull { it.sourceId }.toSet()
+        val events = (doc.operations + doc.carryOverFaults).distinctBy { it.id }.filter {
+            it.module == module && it.module != Module.TASK && it.id !in sources && it.status in listOf("Pendiente","Abierta","En proceso","Borrador","Preparada")
+        }
+        return tasks + events
+    }
+}
+/** One attendance decision per person and date, including legacy shift records. */
+object AttendanceList {
+    fun latest(operations: List<Operation>): List<Operation> = operations.filter { it.module == Module.ATTENDANCE }
+        .groupBy { it.day to it.operatorId }.values.map { rows -> rows.maxBy { it.updatedAt } }
+    fun normalized(operations: List<Operation>): List<Operation> = operations.filter { it.module != Module.ATTENDANCE } + latest(operations)
 }

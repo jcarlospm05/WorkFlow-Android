@@ -34,8 +34,8 @@ android {
         applicationId = "com.workflow.operaciones"
         minSdk = 26
         targetSdk = 35
-        versionCode = 133
-        versionName = "1.3.3-reportes-guiados"
+        versionCode = 140
+        versionName = "1.4.0-operaciones"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {

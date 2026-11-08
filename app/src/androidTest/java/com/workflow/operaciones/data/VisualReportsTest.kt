@@ -43,15 +43,15 @@ class VisualReportsTest {
             val bitmap=BitmapFactory.decodeFile(images.first().absolutePath)
             assertTrue(bitmap.width>=1190);assertTrue(bitmap.height>=1440)
             var logoPixels=0
-            for(x in 60 until 144)for(y in 62 until 146){val pixel=bitmap.getPixel(x,y);if(kotlin.math.abs(android.graphics.Color.green(pixel)-143)<8&&kotlin.math.abs(android.graphics.Color.red(pixel)-22)<8)logoPixels++}
+            for(x in 48 until 110)for(y in 40 until 102){val pixel=bitmap.getPixel(x,y);if(kotlin.math.abs(android.graphics.Color.green(pixel)-143)<8&&kotlin.math.abs(android.graphics.Color.red(pixel)-22)<8)logoPixels++}
             assertTrue("Logo original ausente en $type",logoPixels>100)
             if(type==ReportType.ASSETS) {
                 var redArcPixels=0
-                for(x in 108 until 278)for(y in 620 until 802) {
+                for(x in 48 until bitmap.width-48 step 2)for(y in 180 until bitmap.height-70 step 2) {
                     val c=bitmap.getPixel(x,y)
                     if(kotlin.math.abs(android.graphics.Color.red(c)-196)<14 && kotlin.math.abs(android.graphics.Color.green(c)-71)<14 && kotlin.math.abs(android.graphics.Color.blue(c)-71)<14)redArcPixels++
                 }
-                assertTrue("El gráfico de equipos inactivos debe usar el rojo de WorkFlow",redArcPixels>50)
+                assertTrue("El estado de equipos inactivos debe usar el rojo de WorkFlow",redArcPixels>50)
             }
             bitmap.recycle()
             val values=ContentValues().apply {
@@ -73,4 +73,26 @@ class VisualReportsTest {
         assertTrue("La descripción extensa debe continuar sin recortarse",pages.size>=2)
         pdf.delete();pages.forEach{it.delete()}
     }
+    @Test fun csv_files_and_mixed_share_intents_preserve_every_attachment_and_read_grant() {
+        val query=ReportQuery(ReportType.CLOSE,day)
+        val doc=document()
+        val tables=Reports.csv(context,query,listOf(doc))
+        assertTrue(tables.size>=6)
+        tables.forEach { assertTrue(it.readText().startsWith("\uFEFF")) }
+        val pdf=Reports.pdf(context,ReportBuilder.build(query,listOf(doc)))
+        val secret="Frase de prueba de transferencia".toCharArray()
+        val progress=try{Reports.protectedReport(context,doc,secret)}finally{secret.fill('\u0000')}
+        val files=tables+pdf+progress
+        val intent=Reports.shareIntent(context,files)
+        assertEquals(android.content.Intent.ACTION_SEND_MULTIPLE,intent.action)
+        assertEquals("*/*",intent.type)
+        assertEquals(files.size,intent.clipData!!.itemCount)
+        assertTrue(intent.flags and android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        val single=Reports.shareIntent(context,listOf(progress))
+        assertEquals(ProtectedReport.MIME_TYPE,single.type)
+        val open=android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(single.clipData!!.getItemAt(0).uri,ProtectedReport.MIME_TYPE)
+        assertTrue(context.packageManager.queryIntentActivities(open,android.content.pm.PackageManager.MATCH_DEFAULT_ONLY).any{it.activityInfo.packageName==context.packageName})
+        files.forEach{it.delete()}
+    }
+
 }

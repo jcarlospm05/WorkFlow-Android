@@ -31,7 +31,8 @@ val Operator.displayLabel: String get() = listOf(name, code).filter { it.isNotBl
     @EncodeDefault(EncodeDefault.Mode.NEVER) val severity: String = "Leve",
     @EncodeDefault(EncodeDefault.Mode.NEVER) val expected: String = "",
     @EncodeDefault(EncodeDefault.Mode.NEVER) val actual: String = "",
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val recordedBy: String = ""
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val recordedBy: String = "",
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val targetModule: Module? = null
 ) {
     fun naturalKey(): String? = when (module) {
         Module.ATTENDANCE -> "attendance|$operatorId|$shift"
@@ -84,6 +85,7 @@ object Rules {
         require(value.shift in shifts && value.mealType in listOf("Cena", "Almuerzo"))
         Instant.parse(value.updatedAt)
         value.sourceId?.let(::id)
+        require(value.targetModule == null || (value.module == Module.TASK && value.targetModule in TaskRouting.modules)) { "Selecciona un módulo válido para la tarea" }
         text(value.templateKey, 80, false)
         require(value.resolvedAt.isEmpty() || (value.module == Module.FAULT && value.status == "Cerrada")) { "La fecha de resolución solo corresponde a averías cerradas" }
         if (value.resolvedAt.isNotEmpty()) Instant.parse(value.resolvedAt)

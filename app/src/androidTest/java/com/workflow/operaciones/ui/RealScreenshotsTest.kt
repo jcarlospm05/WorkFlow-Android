@@ -55,9 +55,6 @@ class RealScreenshotsTest {
             operators.forEach { repository.addOperator(it, day) }
             val assets = listOf(Asset(id("mula"), "MU-012", "Mula"), Asset(id("grua"), "GR-004", "Grúa"), Asset(id("monta"), "MC-008", "Montacargas", "En taller"))
             assets.forEach { repository.addAsset(it, day) }
-            val stock = listOf(StockItem(id("aceite"), "Aceite hidráulico", "litros", 10.0), StockItem(id("guantes"), "Guantes de seguridad", "pares", 20.0), StockItem(id("filtros"), "Filtros de aceite", "unidades", 8.0))
-            stock.forEach { repository.addItem(it, day) }
-            listOf(12.0, 36.0, 4.0).forEachIndexed { i, amount -> repository.save(Operation(id = id("stock-$i"), day = day, module = Module.STOCK, title = "Existencia inicial · demostración", status = "Entrada", itemId = stock[i].id, quantity = amount, time = "07:00")) }
             repository.save(Operation(id = id("a1"), day = day, module = Module.ATTENDANCE, title = "Asistencia de mañana", status = "Presente", operatorId = operators[0].id, time = "07:00"))
             repository.save(Operation(id = id("a2"), day = day, module = Module.ATTENDANCE, title = "Asistencia de tarde", status = "Tardanza", operatorId = operators[1].id, shift = "Tarde", time = "15:10", extended = true))
             repository.save(Operation(time = "09:00", id = id("a3"), day = day, module = Module.ATTENDANCE, title = "Libre compensatorio", status = "Libre", operatorId = operators[2].id, shift = "Noche"))
@@ -90,7 +87,7 @@ class RealScreenshotsTest {
         nav("Operación"); capture("03-operacion")
         module("Asistencia"); capture("04-asistencia")
         nav("Operación"); module("Comidas"); capture("05-comidas")
-        nav("Operación"); module("Existencias"); capture("06-existencias")
+        nav("Operación"); module("Planificación"); capture("06-planificacion")
         nav("Operación"); module("Combustible"); capture("07-combustible")
         nav("Operación"); module("Averías"); capture("08-averias")
         nav("Operación"); module("Infracciones"); capture("09-infracciones")

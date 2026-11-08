@@ -10,12 +10,11 @@ enum class ReportPeriod(val label:String) { TODAY("Hoy"),YESTERDAY("Ayer"),WEEK(
 object ReportGuide {
     val topics=listOf(
         ReportTopic(ReportType.GENERAL,"Resumen de operaciones","Avance, comidas, combustible y pendientes",true),
-        ReportTopic(ReportType.ATTENDANCE,"Quién trabajó","Asistencia por persona y turno",true),
+        ReportTopic(ReportType.ATTENDANCE,"Quién trabajó","Listado de presentes, ausencias y libres",true),
         ReportTopic(ReportType.DINNER,"Cena del equipo","Nombres y solicitudes de cena",true),
         ReportTopic(ReportType.FUEL,"Combustible","Abastecimientos y requerimientos pendientes",true),
         ReportTopic(ReportType.WORKSHOP,"Averías y taller","Equipos afectados y reparaciones",true),
         ReportTopic(ReportType.TICKETS,"Infracciones","Tickets, motivos y operadores",true),
-        ReportTopic(ReportType.STOCK,"Existencias","Saldos y movimientos de materiales",true),
         ReportTopic(ReportType.WEEK,"Agenda y tareas","Qué se programó y qué falta completar",true),
         ReportTopic(ReportType.ABSENCE,"Quién faltó","Ausencias justificadas e injustificadas"),
         ReportTopic(ReportType.SUNDAY,"Domingos trabajados","Qué domingos trabajó cada persona"),

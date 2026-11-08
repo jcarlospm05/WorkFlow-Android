@@ -46,10 +46,12 @@ object Reports {
             return output
         } catch (e: Exception) { output.forEach { it.delete() }; throw e }
     }
+    fun csv(context: Context, query: ReportQuery, documents: List<DailyDocument>): List<File> =
+        ReportCsv.build(query, documents).map { table -> target(context, "${table.name}_${query.from}_${query.to}", "csv").also { it.writeBytes(table.encode()) } }
     private fun target(context: Context, name: String, extension: String): File {
         val dir = File(context.cacheDir, "shared").apply { mkdirs() }
         val cutoff = System.currentTimeMillis()-24*60*60*1000L
-        dir.listFiles()?.filter { it.extension=="json" || it.lastModified()<cutoff }?.forEach { it.delete() }
+        dir.listFiles()?.filter { it.lastModified()<cutoff }?.forEach { it.delete() }
         return File(dir, "WorkFlow_${name}_${UUID.randomUUID().toString().take(8)}.$extension")
     }
     private fun launchShare(context: Context, send: Intent, whatsapp: Boolean) {
@@ -62,16 +64,18 @@ object Reports {
         }
     }
     fun share(context: Context, file: File, whatsapp: Boolean) = share(context,listOf(file),whatsapp)
-    fun share(context: Context, files: List<File>, whatsapp: Boolean) {
+    fun share(context: Context, files: List<File>, whatsapp: Boolean) = launchShare(context,shareIntent(context,files),whatsapp)
+    internal fun shareIntent(context: Context, files: List<File>): Intent {
         require(files.isNotEmpty())
         val uris = ArrayList(files.map { FileProvider.getUriForFile(context,"${context.packageName}.files",it) })
         val send = Intent(if (uris.size==1) Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply {
-            type = when (files.first().extension) { ProtectedReport.EXTENSION -> ProtectedReport.MIME_TYPE; "jpg" -> "image/jpeg"; else -> "application/pdf" }
+            val types = files.map { when(it.extension) { ProtectedReport.EXTENSION -> ProtectedReport.MIME_TYPE; "jpg" -> "image/jpeg"; "csv" -> "text/csv"; else -> "application/pdf" } }.distinct()
+            type = types.singleOrNull() ?: "*/*"
             if (uris.size==1) putExtra(Intent.EXTRA_STREAM,uris.first()) else putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris)
             clipData = ClipData.newRawUri("WorkFlow",uris.first()).also { clip -> uris.drop(1).forEach { clip.addItem(ClipData.Item(it)) } }
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        launchShare(context,send,whatsapp)
+        return send
     }
     fun shareText(context: Context, text: String, whatsapp: Boolean = true) = launchShare(context,Intent(Intent.ACTION_SEND).apply { type="text/plain"; putExtra(Intent.EXTRA_TEXT,text) },whatsapp)
 }

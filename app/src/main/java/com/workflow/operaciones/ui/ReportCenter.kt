@@ -1,6 +1,9 @@
 package com.workflow.operaciones.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -24,19 +27,17 @@ internal fun LazyListScope.reportCenterRows(day:String,search:String,more:Boolea
     item { OutlinedTextField(search,onSearch,label={Text("Buscar: asistencia, cena, taller…")},leadingIcon={Icon(Icons.Outlined.Search,null)},singleLine=true,modifier=Modifier.fillMaxWidth().testTag("report-search")) }
     val topics=ReportGuide.topics.filter{ReportGuide.matches(it,search)&&(more||search.isNotBlank()||it.frequent)}
     if(topics.isEmpty())item{Text("No encontramos esa consulta. Prueba con otra palabra o borra la búsqueda.")}
-    items(topics.chunked(2)) { row ->
-        Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-            row.forEach { topic ->
-                WFCard(Modifier.weight(1f).testTag("report-topic-${topic.type.name}").clickable(role=Role.Button){open(ReportGuide.initial(topic.type,day))}.heightIn(min=108.dp)) {
-                    Row(verticalAlignment=Alignment.CenterVertically) { Icon(Icons.Outlined.Assessment,null,tint=Brand.Teal,modifier=Modifier.size(20.dp));Spacer(Modifier.weight(1f));Icon(Icons.Outlined.ChevronRight,null,Modifier.size(18.dp)) }
-                    Text(topic.title,style=MaterialTheme.typography.titleSmall)
-                    Text(topic.description,style=MaterialTheme.typography.bodySmall,color=Brand.SecondaryText)
-                }
+    item { Row(Modifier.fillMaxWidth().background(Brand.Selected).padding(10.dp)){Text("Consulta",Modifier.weight(1f),style=MaterialTheme.typography.labelMedium);Text("Abrir",style=MaterialTheme.typography.labelMedium)} }
+    items(topics,key={it.type.name}) { topic ->
+        Column(Modifier.fillMaxWidth().background(Color.White).testTag("report-topic-${topic.type.name}").clickable(role=Role.Button){open(ReportGuide.initial(topic.type,day))}) {
+            Row(Modifier.padding(horizontal=10.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+                Text(topic.title,Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium)
+                Icon(Icons.Outlined.ChevronRight,null,Modifier.size(18.dp))
             }
-            if(row.size==1)Spacer(Modifier.weight(1f))
+            HorizontalDivider(color=Brand.Border)
         }
     }
-    if(search.isBlank())item{OutlinedButton(onClick=onMore,modifier=Modifier.fillMaxWidth().testTag("report-more-topics")){Text(if(more)"Mostrar consultas frecuentes"else"Ver otras consultas: domingos, libres, historiales…")}}
+    if(search.isBlank())item{OutlinedButton(onClick=onMore,modifier=Modifier.fillMaxWidth().testTag("report-more-topics")){Text(if(more)"Mostrar consultas frecuentes"else"Todas las consultas")}}
 }
 
 @Composable internal fun GuidedReportDialog(initial:ReportQuery,vm:WorkflowViewModel,close:()->Unit,show:(ReportQuery)->Unit) {
@@ -78,20 +79,29 @@ internal fun LazyListScope.reportCenterRows(day:String,search:String,more:Boolea
 internal fun LazyListScope.readableReport(report:VisualReport,expanded:Set<Int>,expand:(Int)->Unit) {
     if(report.isEmpty)item { WFCard(Modifier.fillMaxWidth(),Brand.Sand){Text("No hay registros para esta consulta",style=MaterialTheme.typography.titleMedium);Text("Prueba otras fechas o quita filtros. Si el trabajo se hizo en otro teléfono, carga primero su jornada.") } }
     report.banner?.let{banner->item{WFCard(Modifier.fillMaxWidth(),Brand.Sky){Text(banner.label,style=MaterialTheme.typography.labelMedium);Text(banner.value,style=MaterialTheme.typography.titleLarge);WFStatus(banner.status)}}}
-    items(report.metrics.chunked(2)){row->Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){row.forEach{metric->WFCard(Modifier.weight(1f),if(metric.tone=="sage")Brand.Sage else if(metric.tone=="sand")Brand.Sand else Brand.Sky){Text(metric.value,style=MaterialTheme.typography.headlineMedium);Text(metric.label,style=MaterialTheme.typography.bodySmall)}};if(row.size==1)Spacer(Modifier.weight(1f))}}
-    report.sections.forEachIndexed { index,section->
-        item(key="heading-$index"){Text(section.title,style=MaterialTheme.typography.titleMedium,modifier=Modifier.padding(top=10.dp))}
-        if(section.chart.isNotEmpty())item(key="chart-$index"){WFCard(Modifier.fillMaxWidth()){
-            val maximum=section.chart.maxOfOrNull{it.value}?:0.0
-            section.chart.forEach{point->Row{Text(point.label,Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium);Text(ReportBuilder.number(point.value),style=MaterialTheme.typography.titleSmall)};if(maximum>0)LinearProgressIndicator(progress={(point.value/maximum).toFloat().coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth(),color=if(point.tone in listOf("rose","red"))Brand.Red else if(point.tone=="amber")Brand.Amber else Brand.Teal)}
-        }}
-        section.calendar?.let{cal->item(key="calendar-$index"){WFCard(Modifier.fillMaxWidth()){if(cal.days.isEmpty())Text("Sin actividades registradas en este mes.")else cal.days.sortedBy{it.day}.forEach{day->Text("Día ${day.day} · ${day.completed} de ${day.total} actividades completadas")}}}}
-        if(section.headers==listOf("Indicador","Resultado"))item(key="balance-$index"){WFCard(Modifier.fillMaxWidth()){section.rows.forEach{row->Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){Text(row.firstOrNull().orEmpty(),Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium);Text(row.getOrElse(1){""},style=MaterialTheme.typography.titleSmall)}}}}
-        else {
-            val shown=if(index in expanded)section.rows else section.rows.take(3)
-            items(shown.size,key={"row-$index-$it"}){n->val row=shown[n];WFCard(Modifier.fillMaxWidth()){row.forEachIndexed{col,value->if(value.isNotBlank()){Text(section.headers.getOrElse(col){"Detalle"},style=MaterialTheme.typography.labelSmall,color=Brand.SecondaryText);Text(value,style=MaterialTheme.typography.bodyMedium)}}}}
-            if(section.rows.size>3)item(key="expand-$index"){TextButton(onClick={expand(index)},modifier=Modifier.fillMaxWidth()){Text(if(index in expanded)"Ver menos"else"Ver los ${section.rows.size} registros")}}
+    if(report.metrics.isNotEmpty())item { Column(Modifier.fillMaxWidth().background(Brand.Selected).padding(10.dp)) {
+        report.metrics.chunked(2).forEach { row -> Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){row.forEach{metric->Text("${metric.label}: ${metric.value}",Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium)}} }
+    } }
+    report.sections.forEachIndexed { index,section ->
+        item(key="heading-$index"){Text(section.title,style=MaterialTheme.typography.titleSmall,modifier=Modifier.padding(top=4.dp))}
+        if(section.headers.isNotEmpty())item(key="table-$index") {
+            val wide=section.headers.size>2
+            Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                val tableWidth=if(wide)maxOf(540,section.headers.size*150).dp else 300.dp
+                Column(Modifier.width(tableWidth)) {
+                    Row(Modifier.fillMaxWidth().background(Brand.Selected)) { section.headers.forEach { header -> Text(header,Modifier.weight(1f).padding(8.dp),style=MaterialTheme.typography.labelMedium) } }
+                    section.rows.forEachIndexed { rowIndex,row ->
+                        Row(Modifier.fillMaxWidth().background(if(rowIndex%2==0)Color.White else Brand.Background)) { section.headers.indices.forEach { col -> Text(row.getOrElse(col){""},Modifier.weight(1f).padding(8.dp),style=MaterialTheme.typography.bodyMedium) } }
+                        HorizontalDivider(color=Brand.Border)
+                    }
+                    if(section.rows.isEmpty())Text("Sin registros",Modifier.padding(8.dp),style=MaterialTheme.typography.bodyMedium)
+                }
+            }
         }
-        if(section.note.isNotBlank())item(key="note-$index"){Text(section.note,style=MaterialTheme.typography.bodyMedium,color=Brand.SecondaryText)}
+        if(section.chart.isNotEmpty() && section.headers.isEmpty())item(key="chart-$index") {
+            Column(Modifier.fillMaxWidth()) { section.chart.forEach { point -> Row(Modifier.fillMaxWidth().padding(vertical=3.dp)) { Text(point.label,Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium);Text(ReportBuilder.number(point.value),style=MaterialTheme.typography.bodyMedium) } } }
+        }
+        section.calendar?.let { cal -> item(key="calendar-$index") { Text(cal.days.sortedBy{it.day}.joinToString(" · "){"${it.day}: ${it.completed}/${it.total}"},style=MaterialTheme.typography.bodyMedium) } }
+        if(section.note.isNotBlank())item(key="note-$index"){Text(section.note,style=MaterialTheme.typography.bodySmall,color=Brand.SecondaryText)}
     }
 }

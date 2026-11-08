@@ -89,6 +89,16 @@ internal fun copyReportText(context: Context, text: String) {
             finally{preparing=false}
         }
     }
+    fun shareCsv() {
+        if(preparing)return
+        preparing=true;error=null
+        scope.launch {
+            try { val files=withContext(Dispatchers.IO){Reports.csv(context,query,documents)};Reports.share(context,files,!otherApps);sharing=false }
+            catch(e:CancellationException){throw e}
+            catch(_:Exception){error="No se pudieron preparar las tablas. Inténtalo de nuevo."}
+            finally{preparing=false}
+        }
+    }
     LaunchedEffect(report,prepareFiles) {
         if(!prepareFiles)return@LaunchedEffect
         preparing=true
@@ -106,7 +116,7 @@ internal fun copyReportText(context: Context, text: String) {
         PillTabs(listOf("Leer resultado","Ver documento"),if(reading)"Leer resultado"else"Ver documento"){reading=it=="Leer resultado";if(!reading)prepareFiles=true}
         if(error!=null) Text(error!!,color=Brand.Red)
         if(!reading&&pdf==null&&error==null) LinearProgressIndicator(Modifier.fillMaxWidth())
-        LazyColumn(Modifier.weight(1f).padding(vertical=12.dp).testTag("report-result-list"),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        LazyColumn(Modifier.weight(1f).padding(vertical=12.dp).testTag("report-result-list"),verticalArrangement=Arrangement.spacedBy(4.dp)) {
             if(reading)readableReport(report,expanded){index->expanded=if(index in expanded)expanded-index else expanded+index}
             else {
             items(images,key={it.name}) { file ->
@@ -120,7 +130,7 @@ internal fun copyReportText(context: Context, text: String) {
         }
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
             OutlinedButton(onClick=close,modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("Cerrar")}
-            OutlinedButton(onClick={copyReportText(context,report.text())},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("Copiar texto")}
+            OutlinedButton(onClick={copyReportText(context,report.text())},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("Copiar")}
             Button(onClick={sharing=true},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("Compartir")}
         }
     }
@@ -131,6 +141,7 @@ internal fun copyReportText(context: Context, text: String) {
             error?.let{Text(it,color=Brand.Red)}
             Button(onClick={Reports.shareText(context,report.text(),!otherApps);sharing=false},modifier=Modifier.fillMaxWidth()){Text("Listado de texto")}
             OutlinedButton(onClick={shareFile(true)},enabled=!preparing,modifier=Modifier.fillMaxWidth()){Text(if(images.size>1)"Imágenes JPG · ${images.size} páginas"else "Imagen JPG")}
+            OutlinedButton(onClick={shareCsv()},enabled=!preparing,modifier=Modifier.fillMaxWidth()){Text("Tablas CSV para Excel")}
             OutlinedButton(onClick={shareFile(false)},enabled=!preparing,modifier=Modifier.fillMaxWidth()){Text("Documento PDF")}
             Row { Checkbox(otherApps,{otherApps=it},enabled=!preparing);Text("Elegir otra aplicación") }
             if(!otherApps)Text("Se abrirá WhatsApp para que elijas el destinatario.",style=MaterialTheme.typography.bodySmall)

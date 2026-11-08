@@ -244,8 +244,8 @@ class UserExperienceTest {
         capture("ux-inicio-sin-registros")
         dashboard("dashboard-assets")
         compose.onNodeWithTag("catalog-title").assertTextEquals("Equipos")
-        tap("nav-0"); dashboard("dashboard-stock")
-        compose.onNodeWithTag("screen-title", useUnmergedTree = true).assertTextEquals("Existencias")
+        tap("nav-0"); dashboard("dashboard-workshop")
+        compose.onNodeWithTag("screen-title", useUnmergedTree = true).assertTextEquals("Averías")
         tap("nav-0"); dashboard("dashboard-pending")
         compose.onNodeWithTag("screen-title", useUnmergedTree = true).assertTextEquals("Pendientes del día")
         tap("nav-0"); dashboard("dashboard-attendance")
@@ -319,4 +319,49 @@ class UserExperienceTest {
         assertTrue(open.value)
         assertEquals("Versión recibida",model.document!!.operations.single().title)
     }
+    @Test fun attendance_decisions_move_out_of_the_unmarked_list_and_can_be_corrected() {
+        prepare()
+        val person=Operator(UUID.randomUUID().toString(),name="Operador de validación")
+        kotlinx.coroutines.runBlocking { model.repository.addOperator(person,model.day) }
+        compose.runOnIdle { model.refresh() }
+        compose.waitUntil(30_000){!model.busy&&model.operators.size==1}
+        show { WorkflowScreen(model) }
+        tap("nav-2");dashboard("module-ATTENDANCE")
+        dashboard("mark-present-${person.id}")
+        compose.waitUntil(30_000){!model.busy&&model.document!!.operations.any{it.module==Module.ATTENDANCE}}
+        compose.onNodeWithTag("attendance-unmarked-${person.id}").assertDoesNotExist()
+        dashboard("attendance-marked-${person.id}")
+        compose.onNodeWithContentDescription("Cambiar asistencia").performClick()
+        compose.onNodeWithText("Ausencia justificada").performClick()
+        compose.waitUntil(30_000){!model.busy&&model.document!!.operations.single{it.module==Module.ATTENDANCE}.status=="Ausencia justificada"}
+        assertEquals(0,DailySummary.present(model.document!!))
+        assertEquals(1,model.document!!.operations.count{it.module==Module.ATTENDANCE})
+        compose.onNodeWithTag("attendance-unmarked-${person.id}").assertDoesNotExist()
+    }
+    @Test fun saved_meals_open_as_names_and_tasks_route_to_their_operational_module() {
+        prepare()
+        val person=Operator(UUID.randomUUID().toString(),name="Persona de solicitud")
+        kotlinx.coroutines.runBlocking {
+            model.repository.addOperator(person,model.day)
+            model.repository.save(Operation(day=model.day,module=Module.MEAL,title="Cena",status="Solicitada",operatorIds=listOf(person.id)))
+            model.repository.save(Operation(day=model.day,module=Module.TASK,title="Revisión de asistencia",status="Pendiente",targetModule=Module.ATTENDANCE))
+        }
+        compose.runOnIdle { model.refresh() }
+        compose.waitUntil(30_000){!model.busy&&model.operators.size==1}
+        show { WorkflowScreen(model) }
+        tap("nav-2");dashboard("module-MEAL")
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasText("Modificar lista"))
+        compose.onNodeWithText("Modificar lista").assertIsDisplayed()
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasText(person.name))
+        compose.onNodeWithText(person.name).assertIsDisplayed()
+        tap("nav-2")
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasTestTag("pending-ATTENDANCE"))
+        compose.onNodeWithTag("pending-ATTENDANCE").assertIsDisplayed()
+        tap("nav-1")
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasText("Revisión de asistencia"))
+        compose.onNodeWithText("Revisión de asistencia").performClick()
+        compose.onNodeWithTag("screen-title",useUnmergedTree=true).assertTextEquals("Asistencia")
+        compose.onNodeWithText("Mañana").assertDoesNotExist()
+    }
+
 }

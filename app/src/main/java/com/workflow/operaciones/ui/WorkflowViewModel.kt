@@ -14,6 +14,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 
+enum class ShareKind { PROGRESS, REPORT, CLOSE }
+
 class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
     var day by mutableStateOf(LocalDate.now().toString()); private set
     var document by mutableStateOf<DailyDocument?>(null); private set
@@ -39,7 +41,7 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
     var incomingNeedsKey by mutableStateOf(false); private set
     var incomingKeyError by mutableStateOf<String?>(null); private set
     private var pendingIncoming: ByteArray? = null
-    private data class Outgoing(val report: DailyDocument, val pdf: Boolean, val whatsapp: Boolean)
+    private data class Outgoing(val report: DailyDocument, val kind: ShareKind, val whatsapp: Boolean)
     private var pendingOutgoing: Outgoing? = null
     init { refresh() }
     private suspend fun reload() {
@@ -118,25 +120,28 @@ class WorkflowViewModel(val repository: WorkflowRepository) : ViewModel() {
     fun requestTransferSetup() { pendingOutgoing = null; transferKeyError = null; needsTransferSetup = true }
     fun dismissTransferSetup() { pendingOutgoing = null; transferKeyError = null; needsTransferSetup = false }
     private suspend fun send(context: Context, outgoing: Outgoing) {
-        val file = withContext(Dispatchers.IO) {
-            if (outgoing.pdf) Reports.pdf(context, outgoing.report)
-            else {
+        val files = withContext(Dispatchers.IO) {
+            val protected = if (outgoing.kind != ShareKind.REPORT) {
                 val password = repository.transferKeys.read()
-                if (password == null) null else try { Reports.protectedReport(context, outgoing.report, password) }
-                    finally { password.fill('\u0000') }
+                if(password==null) null else try { Reports.protectedReport(context,outgoing.report,password) } finally { password.fill('\u0000') }
+            } else null
+            if(outgoing.kind!=ShareKind.REPORT && protected==null) null else buildList {
+                if(outgoing.kind!=ShareKind.PROGRESS) {
+                    val query=ReportQuery(if(outgoing.kind==ShareKind.CLOSE)ReportType.CLOSE else ReportType.GENERAL,outgoing.report.day)
+                    add(Reports.pdf(context,ReportBuilder.build(query,listOf(outgoing.report))))
+                    addAll(Reports.csv(context,query,listOf(outgoing.report)))
+                }
+                protected?.let { add(it) }
             }
         }
-        if (file == null) {
-            hasTransferKey = false; pendingOutgoing = outgoing; transferKeyError = null
-            needsTransferSetup = true; shareRequest = null
-            return
+        if(files==null) {
+            hasTransferKey=false;pendingOutgoing=outgoing;transferKeyError=null;needsTransferSetup=true;shareRequest=null;return
         }
-        Reports.share(context, file, outgoing.whatsapp)
-        pendingOutgoing = null; shareRequest = null
+        Reports.share(context,files,outgoing.whatsapp)
+        pendingOutgoing=null;shareRequest=null
     }
-    fun shareReport(context: Context, report: DailyDocument, pdf: Boolean, whatsapp: Boolean) = action {
-        send(context, Outgoing(report, pdf, whatsapp))
-    }
+    fun shareDay(context: Context, report: DailyDocument, kind: ShareKind, whatsapp: Boolean = true) = action { send(context,Outgoing(report,kind,whatsapp)) }
+    fun shareReport(context: Context, report: DailyDocument, pdf: Boolean, whatsapp: Boolean) = shareDay(context,report,if(pdf)ShareKind.REPORT else ShareKind.PROGRESS,whatsapp)
     fun configureTransferKey(context: Context, password: String) = action {
         val secret = password.toCharArray()
         try {

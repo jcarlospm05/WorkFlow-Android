@@ -7,8 +7,8 @@ class ReportGuideTest {
     private val day="2026-11-08"
     private fun document(ops:List<Operation>)=DailyDocument(originId=UUID.randomUUID().toString(),supervisor="Control de reporte",day=day,revision=1,operators=emptyList(),assets=emptyList(),items=emptyList(),operations=ops,stockBalances=emptyMap())
     @Test fun every_non_individual_report_has_one_guided_topic() {
-        assertEquals(ReportType.entries.filter{it !in listOf(ReportType.TICKET,ReportType.EVENT)}.toSet(),ReportGuide.topics.map{it.type}.toSet())
-        assertEquals(20,ReportGuide.topics.size)
+        assertEquals(ReportType.entries.filter{it !in listOf(ReportType.TICKET,ReportType.EVENT,ReportType.STOCK)}.toSet(),ReportGuide.topics.map{it.type}.toSet())
+        assertEquals(19,ReportGuide.topics.size)
     }
     @Test fun search_accepts_accents_and_multiple_words() {
         assertTrue(ReportGuide.matches(ReportGuide.topic(ReportType.WORKSHOP),"averias taller"))
