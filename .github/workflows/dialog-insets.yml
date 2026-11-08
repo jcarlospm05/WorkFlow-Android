@@ -1,0 +1,56 @@
+name: Botones de diálogos y teclado
+on:
+  pull_request:
+    paths:
+      - 'app/src/**'
+      - 'app/build.gradle.kts'
+      - '.github/workflows/dialog-insets.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          cores: 2
+          ram-size: 4096M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash -c 'gradle :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.workflow.operaciones.ui.DialogInsetsTest,com.workflow.operaciones.ui.UserExperienceTest,com.workflow.operaciones.data.RepositoryTest,com.workflow.operaciones.data.DayContinuationTest,com.workflow.operaciones.data.DatabaseMigrationTest,com.workflow.operaciones.ui.PhoneSessionTest,com.workflow.operaciones.data.VisualReportsTest,com.workflow.operaciones.data.TransferProtectionTest,com.workflow.operaciones.data.AgendaPolicyTest,com.workflow.operaciones.data.AlarmIntegrationTest --stacktrace; result=$?; mkdir -p dialog-proof; adb pull /sdcard/Pictures/WorkFlowDialogProof dialog-proof/; if [ "$result" -ne 0 ]; then python3 tools/log-dialog-proof.py dialog-proof app/build/outputs/androidTest-results; fi; exit "$result"'
+      - name: Vista de reportes nativos con datos sintéticos
+        if: always()
+        run: python3 tools/log-report-preview.py dialog-proof
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: WorkFlow-dialog-proof-api-${{ matrix.api }}
+          path: |
+            dialog-proof/
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: ignore

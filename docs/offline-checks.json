@@ -1,0 +1,66 @@
+{
+  "scope": "Static offline checks only; no Kotlin/Android execution",
+  "kotlin_files": 13,
+  "checks": [
+    {
+      "check": "All Android XML files parse",
+      "passed": true
+    },
+    {
+      "check": "Android backup disabled",
+      "passed": true
+    },
+    {
+      "check": "Cleartext disabled",
+      "passed": true
+    },
+    {
+      "check": "No Internet or broad storage permission",
+      "passed": true
+    },
+    {
+      "check": "FileProvider private and transient grants",
+      "passed": true
+    },
+    {
+      "check": "Only scoped cache share directory exposed",
+      "passed": true
+    },
+    {
+      "check": "No destructive Room fallback",
+      "passed": true
+    },
+    {
+      "check": "No debug signing in release config",
+      "passed": true
+    },
+    {
+      "check": "CI checks not ignored",
+      "passed": true
+    },
+    {
+      "check": "Bounded JSON and version checks present",
+      "passed": true
+    },
+    {
+      "check": "Transactional writes and atomic files present",
+      "passed": true
+    },
+    {
+      "check": "JSON data saved with revision inside transaction",
+      "passed": true
+    },
+    {
+      "check": "No recognizable embedded credential",
+      "passed": true
+    },
+    {
+      "check": "Safe areas and keyboard accommodation declared",
+      "passed": true
+    },
+    {
+      "check": "Protocol behavior tests present",
+      "passed": true
+    }
+  ]
+}
