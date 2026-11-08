@@ -356,7 +356,7 @@ class UserExperienceTest {
         compose.onNodeWithText(person.name).assertIsDisplayed()
         tap("nav-2")
         compose.onNodeWithTag("workflow-list").performScrollToNode(hasTestTag("module-ATTENDANCE"))
-        compose.onNodeWithTag("pending-ATTENDANCE",useUnmergedTree=true).assertIsDisplayed().assertTextContains("1")
+        compose.onNodeWithTag("pending-ATTENDANCE",useUnmergedTree=true).assertIsDisplayed().assert(hasAnyDescendant(hasText("1")))
         tap("nav-1")
         compose.onNodeWithTag("workflow-list").performScrollToNode(hasText("Revisión de asistencia"))
         compose.onNodeWithText("Revisión de asistencia").performClick()
