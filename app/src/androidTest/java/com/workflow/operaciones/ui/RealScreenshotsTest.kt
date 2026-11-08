@@ -95,6 +95,12 @@ class RealScreenshotsTest {
         nav("Operación"); module("Averías"); capture("08-averias")
         nav("Operación"); module("Infracciones"); capture("09-infracciones")
         nav("Reportes"); capture("10-reportes")
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasTestTag("report-topic-GENERAL"))
+        compose.onNodeWithTag("report-topic-GENERAL").performClick()
+        compose.onNodeWithTag("report-generate").performClick()
+        compose.waitUntil(20_000) { compose.onAllNodesWithTag("report-result-list").fetchSemanticsNodes().isNotEmpty() }
+        capture("12-resultado-operativo")
+        compose.onNodeWithText("Cerrar").performClick()
         nav("Más"); capture("11-configuracion")
         database.close()
 
@@ -109,7 +115,8 @@ class RealScreenshotsTest {
         if (compose.onAllNodesWithText("Módulos").fetchSemanticsNodes().isNotEmpty()) {
             compose.onNodeWithText("Módulos").performScrollTo().performClick()
         }
-        compose.onNodeWithTag("module-${entry.name}").performScrollTo().performClick()
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasTestTag("module-${entry.name}"))
+        compose.onNodeWithTag("module-${entry.name}").performClick()
         compose.waitForIdle()
     }
     private fun saveImage(name: String, bitmap: Bitmap) {
