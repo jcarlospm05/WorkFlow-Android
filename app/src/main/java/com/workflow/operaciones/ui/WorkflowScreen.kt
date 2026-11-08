@@ -114,6 +114,8 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
     var alarmSettings by rememberSaveable { mutableStateOf(false) }
     val unfinishedDays=DayControl.blockers(vm.history,vm.day)
     var reportOptions by rememberSaveable(stateSaver = formSaver<ReportQuery>()) { mutableStateOf<ReportQuery?>(null) }
+    var reportSearch by rememberSaveable { mutableStateOf("") }
+    var moreReportTopics by rememberSaveable { mutableStateOf(false) }
     var visualReport by rememberSaveable(stateSaver = formSaver<ReportQuery>()) { mutableStateOf<ReportQuery?>(null) }
     val reportDocuments = (vm.history + listOfNotNull(vm.document)).associateBy { it.day }.values.toList()
     var catalog by rememberSaveable { mutableStateOf<String?>(null) }
@@ -298,13 +300,14 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                             }
                         }
                     } else if (module == null) {
-                        item { Text("Todo lo que necesitas para la operación del día.", color = Brand.SecondaryText) }
+                        item { Text("¿Qué vas a registrar? Elige una actividad para empezar.", color = Brand.SecondaryText) }
                         items(Module.entries.filter { it !in listOf(Module.CLOSE, Module.TASK) }.chunked(2)) { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { row.forEach { entry ->
                                 WFCard(Modifier.weight(1f).testTag("module-${entry.name}").clickable { module = entry }.heightIn(min = 142.dp)) {
                                     WFIcon(moduleIcon(entry), if (entry in listOf(Module.FAULT, Module.TICKET)) Brand.Sand else Brand.Selected)
                                     Text(entry.label, style = MaterialTheme.typography.titleSmall)
-                                    Text("${doc.operations.count { it.module == entry }} registros", style = MaterialTheme.typography.bodySmall, color = Brand.SecondaryText)
+                                    Text(when(entry){Module.ATTENDANCE->"Marcar quién trabajó";Module.MEAL->"Pedir cena o almuerzo";Module.FUEL->"Actualizar abastecimientos";Module.FAULT->"Registrar o resolver averías";Module.TICKET->"Crear y enviar tickets";Module.PLAN->"Programar turnos y libres";Module.STOCK->"Entradas y salidas";Module.POSITION->"Asignar al personal";else->entry.label},style=MaterialTheme.typography.bodySmall,color=Brand.SecondaryText)
+                                    Text(when(entry){Module.ATTENDANCE->"Marcar quién trabajó";Module.MEAL->"Preparar cena o almuerzo";Module.FUEL->"Actualizar abastecimientos";Module.FAULT->"Registrar o resolver averías";Module.TICKET->"Crear y enviar tickets";Module.PLAN->"Programar turnos y libres";Module.STOCK->"Registrar entradas y salidas";else->"Asignar al personal"}, style = MaterialTheme.typography.bodySmall, color = Brand.SecondaryText)
                                 }
                             }; if (row.size == 1) Spacer(Modifier.weight(1f)) }
                         }
@@ -418,14 +421,8 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                 }
                 3 -> {
                     item { WFHeading("Reportes", doc.day) { dateDialog = true } }
-                    item { Button(onClick = { reportOptions = ReportQuery(ReportType.GENERAL, doc.day) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("report-options")) { Icon(Icons.Outlined.DateRange, null); Spacer(Modifier.width(8.dp)); Text("Reporte por módulo o período") } }
-                    item { WFCard(Modifier.fillMaxWidth()) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { WFIcon(Icons.Outlined.Assessment); Column(Modifier.weight(1f)) { Text("Cómo va el día", style = MaterialTheme.typography.titleMedium); Text("${doc.supervisor} · Actualización ${doc.revision}", style = MaterialTheme.typography.bodyMedium, color = Brand.SecondaryText) } }
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { Text("${DailySummary.present(doc)} presentes", style = MaterialTheme.typography.titleSmall); Text("${DailySummary.pending(doc).size} pendientes", style = MaterialTheme.typography.titleSmall) }
-                        WFStatus("Informe al día")
-                        TextButton(onClick = { visualReport = ReportQuery(ReportType.GENERAL, doc.day) }) { Text("Ver informe completo"); Icon(Icons.Outlined.ChevronRight, null) }
-                    } }
-                    item { WFCard(Modifier.fillMaxWidth()) { Text("Compartir el progreso", style = MaterialTheme.typography.titleMedium); Text("Envía un informe protegido para abrir en WorkFlow, o un documento para leer e imprimir.", style = MaterialTheme.typography.bodyMedium, color = Brand.SecondaryText)
+                    reportCenterRows(doc.day,reportSearch,moreReportTopics,{reportSearch=it},{moreReportTopics=!moreReportTopics},{reportOptions=it})
+                    item { WFCard(Modifier.fillMaxWidth()) { Text("Continuar en otro celular", style = MaterialTheme.typography.titleMedium); Text("Envía la jornada guardada para que otra persona pueda seguir trabajando con sus registros.", style = MaterialTheme.typography.bodyMedium, color = Brand.SecondaryText)
                         Button(onClick = { vm.shareRequest = doc }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Icon(Icons.Outlined.Share, null); Spacer(Modifier.width(8.dp)); Text("Compartir informe") }
                         OutlinedButton(onClick = { importer.launch(arrayOf(ProtectedReport.MIME_TYPE, "application/octet-stream")) }, modifier = Modifier.fillMaxWidth(), enabled = !vm.busy) { Icon(Icons.Outlined.FileDownload, null); Spacer(Modifier.width(8.dp)); Text("Abrir informe recibido") }
                     } }
@@ -491,7 +488,7 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
     if (startDay) StartDayDialog(vm) { startDay = false }
     if (alarmSettings) AgendaSettingsDialog(vm) { alarmSettings = false }
     reportOptions?.let { initial -> ReportOptionsDialog(initial, vm, close = { reportOptions = null }, show = { visualReport = it }) }
-    visualReport?.let { query -> VisualReportViewer(query, reportDocuments) { visualReport = null } }
+    visualReport?.let { query -> VisualReportViewer(query, reportDocuments,edit={visualReport=null;reportOptions=it}) { visualReport = null } }
     vm.preview?.let { incoming ->
         val conflict = vm.incomingDecision in listOf(ContinuationDecision.CONFLICT, ContinuationDecision.OLDER)
         var replacing by rememberSaveable(incoming.checksum) { mutableStateOf(false) }

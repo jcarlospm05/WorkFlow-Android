@@ -48,7 +48,8 @@ data class ReportSection(
 data class ReportBanner(val label: String, val value: String, val status: String)
 data class VisualReport(
     val query: ReportQuery, val title: String, val period: String, val subtitle: String,
-    val metrics: List<ReportMetric>, val sections: List<ReportSection>, val compact: Boolean = false, val banner: ReportBanner? = null
+    val metrics: List<ReportMetric>, val sections: List<ReportSection>, val compact: Boolean = false, val banner: ReportBanner? = null,
+    val isEmpty: Boolean = false
 ) {
     fun text(): String = buildString {
         appendLine("*WorkFlow · $title*"); appendLine(period); if (subtitle.isNotBlank()) appendLine(subtitle)
@@ -117,6 +118,20 @@ object ReportBuilder {
                     ReportMetric("${scopedAssets.count { it.state in listOf("En taller", "Inactivo temporal") }}", "Equipos en taller", "sand"),
                     ReportMetric("${rows.count { it.module == Module.TICKET }}", "Tickets registrados"))
                 if (tasks.isNotEmpty()) sections += ReportSection("Avance de la jornada", chart = listOf(ChartValue("Completadas", done.toDouble()), ChartValue("Pendientes", (tasks.size-done).toDouble(), "amber")), donut = true, centerLabel = "${(100.0*done/tasks.size).roundToInt()}%")
+                val supplied=rows.filter{it.module==Module.FUEL&&it.status=="Abastecido"}
+                val requested=rows.filter{it.module==Module.MEAL&&it.status=="Solicitada"}
+                sections += ReportSection("Balance operativo",listOf("Indicador","Resultado"),listOf(
+                    listOf("Abastecimientos realizados","${supplied.size}"),
+                    listOf("Litros confirmados",number(supplied.sumOf{it.quantity})),
+                    listOf("Servicios de cena solicitados","${requested.filter{it.mealType=="Cena"}.sumOf{mealNames(it).size}}"),
+                    listOf("Servicios de almuerzo solicitados","${requested.filter{it.mealType=="Almuerzo"}.sumOf{mealNames(it).size}}"),
+                    listOf("Tickets emitidos","${rows.count{it.module==Module.TICKET&&it.status=="Emitido"}}")
+                ),note="Se cuentan los registros guardados para estas fechas y filtros. Las cantidades previstas no se suman a los litros confirmados.")
+                sections += ReportSection("Pendientes que requieren atención",listOf("Indicador","Resultado"),listOf(
+                    listOf("Tareas por completar","${tasks.count{it.status!="Completada"}}"),
+                    listOf("Abastecimientos pendientes","${rows.count{it.module==Module.FUEL&&it.status=="Pendiente"}}"),
+                    listOf("Equipos con averías sin resolver","${rows.filter{it.module==Module.FAULT&&it.status!="Cerrada"}.mapNotNull{it.assetId}.distinct().size}")
+                ))
                 sections += ReportSection("Estado por módulo", listOf("Módulo", "Registros", "Pendientes"), Module.entries.filter { it != Module.CLOSE }.map { module ->
                     val data = rows.filter { it.module == module }
                     listOf(module.label, "${data.size}", "${data.count { it.status in listOf("Pendiente", "Abierta", "En proceso", "Borrador", "Preparada") }}")
@@ -259,7 +274,9 @@ object ReportBuilder {
                 sections += ReportSection("Estado de la flota", listOf("Equipo", "Tipo", "Estado"), selected.map { listOf(it.code, it.type, it.state) })
             }
         }
-        return VisualReport(query, title, period, subtitle, metrics, sections, compact = query.type in listOf(ReportType.TICKET, ReportType.EVENT), banner = banner)
+        val empty=if(query.type in listOf(ReportType.GENERAL,ReportType.CLOSE))rows.isEmpty() else sections.none{it.rows.isNotEmpty()||it.chart.isNotEmpty()||it.calendar?.days?.isNotEmpty()==true}
+        if(empty)sections.add(0,ReportSection("Sin registros para esta consulta",note="No se encontraron datos para estas fechas y filtros. Revisa el período o carga las jornadas que falten."))
+        return VisualReport(query, title, period, subtitle, metrics, sections, compact = query.type in listOf(ReportType.TICKET, ReportType.EVENT), banner = banner,isEmpty=empty)
     }
     fun statusTone(status: String): String = when {
         status in listOf("Completada", "Presente", "Abastecido", "Cerrada", "Activo", "Emitido", "Libre disfrutado") -> "sage"

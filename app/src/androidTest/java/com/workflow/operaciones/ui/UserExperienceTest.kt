@@ -151,6 +151,31 @@ class UserExperienceTest {
         assertEquals(start.plusDays(6).toString(),query!!.to)
         assertNull(query!!.operatorId)
     }
+    @Test fun a_report_is_found_by_its_purpose_and_read_without_first_generating_a_document() {
+        prepare()
+        val shared=java.io.File(context.cacheDir,"shared")
+        val before=shared.listFiles().orEmpty().filter{it.extension in listOf("pdf","jpg")}.map{it.name}.toSet()
+        show { WorkflowScreen(model) }
+        tap("nav-3")
+        field("report-search","domingos")
+        compose.onNodeWithTag("report-topic-SUNDAY").performScrollTo().performClick()
+        tap("report-generate")
+        compose.waitUntil(20_000){runCatching{compose.onNodeWithTag("report-result-list").assertExists();true}.getOrDefault(false)}
+        compose.onNodeWithText("Leer resultado").assertIsDisplayed()
+        compose.onNodeWithText("No hay registros para esta consulta").assertIsDisplayed()
+        assertEquals(before,shared.listFiles().orEmpty().filter{it.extension in listOf("pdf","jpg")}.map{it.name}.toSet())
+        compose.onNodeWithText("Cambiar fechas o filtros").performClick()
+        compose.onNodeWithTag("report-generate").assertExists()
+    }
+    @Test fun remaining_report_topics_are_available_without_a_long_model_dropdown() {
+        prepare()
+        show { WorkflowScreen(model) }
+        tap("nav-3")
+        compose.onNodeWithTag("report-topic-GENERAL").assertExists()
+        compose.onNodeWithTag("report-more-topics").performScrollTo().performClick()
+        compose.onNodeWithTag("workflow-list").performScrollToNode(hasTestTag("report-topic-DAYS_OFF"))
+        compose.onNodeWithTag("report-topic-DAYS_OFF").assertIsDisplayed()
+    }
     @Test fun multiple_catalog_entries_stay_in_the_form_and_employee_codes_are_optional() {
         prepare()
         listOf("operator", "asset", "item").forEach { kind ->

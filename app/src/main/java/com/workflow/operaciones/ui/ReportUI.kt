@@ -22,6 +22,8 @@ import com.workflow.core.*
 import com.workflow.operaciones.export.Reports
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.time.LocalDate
 import java.time.DayOfWeek
@@ -41,45 +43,7 @@ internal fun copyReportText(context: Context, text: String) {
     }
 }
 @Composable internal fun ReportOptionsDialog(initial: ReportQuery, vm: WorkflowViewModel, close: () -> Unit, show: (ReportQuery) -> Unit) {
-    var type by rememberSaveable { mutableStateOf(initial.type) }
-    var from by rememberSaveable { mutableStateOf(initial.from) }
-    var to by rememberSaveable { mutableStateOf(initial.to) }
-    var operator by rememberSaveable { mutableStateOf(initial.operatorId) }
-    var asset by rememberSaveable { mutableStateOf(initial.assetId) }
-    var status by rememberSaveable { mutableStateOf(initial.status) }
-    var error by rememberSaveable { mutableStateOf<String?>(null) }
-    var filters by rememberSaveable { mutableStateOf(initial.operatorId!=null || initial.assetId!=null || initial.status!=null || initial.type in listOf(ReportType.OPERATOR_TICKETS,ReportType.ASSET_HISTORY)) }
-    SafeAlertDialog(onDismissRequest = close, title = { Text("Preparar reporte") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            ReportDropdown("Reporte", type.name, ReportType.entries.filter { it !in listOf(ReportType.TICKET, ReportType.EVENT) }.map { it.name to it.label }) { value -> type = ReportType.valueOf(value!!); status = null; operator = null; asset = null;filters=type in listOf(ReportType.OPERATOR_TICKETS,ReportType.ASSET_HISTORY) }
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                TextButton(onClick = { from=vm.day;to=vm.day }) { Text("Día") }
-                TextButton(onClick = { val d=LocalDate.parse(vm.day).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));from=d.toString();to=d.plusDays(6).toString() }) { Text("Semana") }
-                TextButton(onClick = { val d=LocalDate.parse(vm.day);from=d.withDayOfMonth(1).toString();to=d.withDayOfMonth(d.lengthOfMonth()).toString() }) { Text("Mes") }
-            }
-            WorkDateField("Desde",from,"report-from"){from=it;error=null}
-            WorkDateField("Hasta",to,"report-to"){to=it;error=null}
-            val applied=listOf(operator,asset,status).count{it!=null}
-            TextButton(onClick={filters=!filters},modifier=Modifier.fillMaxWidth().testTag("report-filters")){Text(if(filters)"Ocultar filtros" else if(applied>0)"Ver filtros · $applied activos" else "Filtrar por operador, equipo o estado")}
-            if(filters) {
-            if(type !in listOf(ReportType.ASSETS,ReportType.STOCK)) ReportDropdown("Operador",operator,listOf(null to "Todos los operadores")+vm.operators.map{it.id to it.displayLabel}) { operator=it }
-            if(type in listOf(ReportType.GENERAL,ReportType.CLOSE,ReportType.FUEL,ReportType.WORKSHOP,ReportType.ASSET_HISTORY,ReportType.ASSETS)) ReportDropdown("Equipo",asset,listOf(null to "Todos los equipos")+vm.assets.map{it.id to it.code}) { asset=it }
-            val statuses = when(type) {
-                ReportType.FUEL -> Rules.statuses.getValue(com.workflow.core.Module.FUEL)
-                ReportType.TICKETS,ReportType.OPERATOR_TICKETS -> Rules.statuses.getValue(com.workflow.core.Module.TICKET)
-                ReportType.WORKSHOP,ReportType.ASSET_HISTORY -> listOf("Sin resolver")+Rules.statuses.getValue(com.workflow.core.Module.FAULT)
-                else -> emptyList()
-            }
-            if(statuses.isNotEmpty())ReportDropdown("Estado",status,listOf(null to "Todos los estados")+statuses.map{it to it}){status=it}
-            if(applied>0)TextButton(onClick={operator=null;asset=null;status=null}){Text("Quitar filtros")}
-            }
-            error?.let { Text(it,color=Brand.Red) }
-        }
-    }, confirmButton = { TextButton(onClick = {
-        try { val query=ReportQuery(type,from.trim(),to.trim(),operator,asset,status=status);query.validate();show(query);close() }
-        catch(_:java.time.DateTimeException){error="Revisa las fechas. Usa AAAA-MM-DD."}
-        catch(e:IllegalArgumentException){error=e.message}
-    },modifier=Modifier.testTag("report-generate")){Text("Ver reporte")} }, dismissButton={TextButton(onClick=close){Text("Cancelar")}})
+    GuidedReportDialog(initial,vm,close,show)
 }
 
 @Composable internal fun ListReportActions(query: ReportQuery, documents: List<DailyDocument>, open: (ReportQuery) -> Unit, notify: (String) -> Unit) {
@@ -91,7 +55,7 @@ internal fun copyReportText(context: Context, text: String) {
     }
 }
 
-@Composable internal fun VisualReportViewer(query: ReportQuery, documents: List<DailyDocument>, close: () -> Unit) {
+@Composable internal fun VisualReportViewer(query: ReportQuery, documents: List<DailyDocument>, edit: ((ReportQuery)->Unit)? = null, close: () -> Unit) {
     val context=LocalContext.current
     val report=remember(query,documents){ReportBuilder.build(query,documents)}
     var pdf by remember(report){mutableStateOf<File?>(null)}
@@ -99,22 +63,55 @@ internal fun copyReportText(context: Context, text: String) {
     var error by remember(report){mutableStateOf<String?>(null)}
     var sharing by rememberSaveable { mutableStateOf(false) }
     var otherApps by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(report) {
+    var reading by remember(report){mutableStateOf(!report.compact)}
+    var prepareFiles by remember(report){mutableStateOf(report.compact)}
+    var expanded by remember(report){mutableStateOf(emptySet<Int>())}
+    var preparing by remember(report){mutableStateOf(false)}
+    val scope=rememberCoroutineScope()
+    fun shareFile(asImages:Boolean) {
+        if(preparing)return
+        preparing=true;error=null
+        scope.launch {
+            try {
+                val readyPdf=pdf ?: withContext(Dispatchers.IO){Reports.pdf(context,report)}
+                pdf=readyPdf
+                if(asImages) {
+                    val readyImages=images.ifEmpty{withContext(Dispatchers.IO){Reports.images(context,readyPdf)}}
+                    images=readyImages;Reports.share(context,readyImages,!otherApps)
+                } else Reports.share(context,readyPdf,!otherApps)
+                sharing=false
+            } catch(e:CancellationException){throw e}
+            catch(_:Exception){error="No se pudo preparar el archivo. Revisa el espacio disponible e inténtalo de nuevo."}
+            finally{preparing=false}
+        }
+    }
+    LaunchedEffect(report,prepareFiles) {
+        if(!prepareFiles)return@LaunchedEffect
+        preparing=true
         try { val result=withContext(Dispatchers.IO){ val file=Reports.pdf(context,report);file to Reports.images(context,file) };pdf=result.first;images=result.second }
+        catch(e:CancellationException){throw e}
         catch(_:Exception){error="No se pudo preparar el documento. Revisa el espacio disponible e inténtalo de nuevo."}
+        finally{preparing=false}
     }
     SafeFullscreenDialog(onDismissRequest=close) {
+        BrandHeader()
         Text(report.title,style=MaterialTheme.typography.titleLarge)
         Text(report.period,style=MaterialTheme.typography.bodyMedium)
+        if(report.subtitle.isNotBlank())Text(report.subtitle,style=MaterialTheme.typography.bodySmall,color=Brand.SecondaryText)
+        if(edit!=null&&query.operationId==null)TextButton(onClick={edit(query)},modifier=Modifier.testTag("report-edit-query")){Text("Cambiar fechas o filtros")}
+        PillTabs(listOf("Leer resultado","Ver documento"),if(reading)"Leer resultado"else"Ver documento"){reading=it=="Leer resultado";if(!reading)prepareFiles=true}
         if(error!=null) Text(error!!,color=Brand.Red)
-        if(pdf==null&&error==null) LinearProgressIndicator(Modifier.fillMaxWidth())
-        LazyColumn(Modifier.weight(1f).padding(vertical=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        if(!reading&&pdf==null&&error==null) LinearProgressIndicator(Modifier.fillMaxWidth())
+        LazyColumn(Modifier.weight(1f).padding(vertical=12.dp).testTag("report-result-list"),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            if(reading)readableReport(report,expanded){index->expanded=if(index in expanded)expanded-index else expanded+index}
+            else {
             items(images,key={it.name}) { file ->
                 var bitmap by remember(file) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
                 LaunchedEffect(file) {
                     bitmap=withContext(Dispatchers.IO){BitmapFactory.decodeFile(file.absolutePath,BitmapFactory.Options().apply{inSampleSize=2})?.asImageBitmap()}
                 }
                 bitmap?.let{Image(it,contentDescription="Página de ${report.title}",modifier=Modifier.fillMaxWidth().aspectRatio(it.width.toFloat()/it.height))}
+            }
             }
         }
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
@@ -126,10 +123,12 @@ internal fun copyReportText(context: Context, text: String) {
     if(sharing)SafeAlertDialog(onDismissRequest={sharing=false},title={Text("Compartir reporte")},text={
         Column(verticalArrangement=Arrangement.spacedBy(10.dp)) {
             Text(report.period)
+            if(preparing){LinearProgressIndicator(Modifier.fillMaxWidth());Text("Preparando el archivo…",style=MaterialTheme.typography.bodySmall)}
+            error?.let{Text(it,color=Brand.Red)}
             Button(onClick={Reports.shareText(context,report.text(),!otherApps);sharing=false},modifier=Modifier.fillMaxWidth()){Text("Listado de texto")}
-            OutlinedButton(onClick={Reports.share(context,images,!otherApps);sharing=false},enabled=images.isNotEmpty(),modifier=Modifier.fillMaxWidth()){Text(if(images.size>1)"Imágenes JPG · ${images.size} páginas"else "Imagen JPG")}
-            OutlinedButton(onClick={pdf?.let{Reports.share(context,it,!otherApps)};sharing=false},enabled=pdf!=null,modifier=Modifier.fillMaxWidth()){Text("Documento PDF")}
-            Row { Checkbox(otherApps,{otherApps=it});Text("Elegir otra aplicación") }
+            OutlinedButton(onClick={shareFile(true)},enabled=!preparing,modifier=Modifier.fillMaxWidth()){Text(if(images.size>1)"Imágenes JPG · ${images.size} páginas"else "Imagen JPG")}
+            OutlinedButton(onClick={shareFile(false)},enabled=!preparing,modifier=Modifier.fillMaxWidth()){Text("Documento PDF")}
+            Row { Checkbox(otherApps,{otherApps=it},enabled=!preparing);Text("Elegir otra aplicación") }
             if(!otherApps)Text("Se abrirá WhatsApp para que elijas el destinatario.",style=MaterialTheme.typography.bodySmall)
         }
     },confirmButton={TextButton(onClick={sharing=false}){Text("Cerrar")}})
