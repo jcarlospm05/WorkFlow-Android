@@ -48,10 +48,10 @@ internal fun copyReportText(context: Context, text: String) {
 
 @Composable internal fun ListReportActions(query: ReportQuery, documents: List<DailyDocument>, open: (ReportQuery) -> Unit, notify: (String) -> Unit) {
     val context=LocalContext.current
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        OutlinedButton(onClick={open(query)},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Icon(Icons.Outlined.Assessment,null);Text("Reporte")}
-        OutlinedButton(onClick={copyReportText(context,ReportBuilder.build(query,documents).text());notify("Listado copiado")},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Icon(Icons.Outlined.ContentCopy,"Copiar listado")}
-        OutlinedButton(onClick={Reports.shareText(context,ReportBuilder.build(query,documents).text())},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Icon(Icons.Outlined.Share,"Compartir listado por WhatsApp")}
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+        OutlinedButton(onClick={open(query)},modifier=Modifier.weight(1f).heightIn(min=48.dp),contentPadding=PaddingValues(horizontal=12.dp)) { Icon(Icons.Outlined.Assessment,null,Modifier.size(20.dp));Spacer(Modifier.width(6.dp));Text("Reporte",maxLines=1) }
+        OutlinedIconButton(onClick={copyReportText(context,ReportBuilder.build(query,documents).text());notify("Listado copiado")},modifier=Modifier.size(48.dp)){Icon(Icons.Outlined.ContentCopy,"Copiar listado")}
+        OutlinedIconButton(onClick={Reports.shareText(context,ReportBuilder.build(query,documents).text())},modifier=Modifier.size(48.dp)){Icon(Icons.Outlined.Share,"Compartir listado por WhatsApp")}
     }
 }
 
@@ -131,10 +131,10 @@ internal fun copyReportText(context: Context, text: String) {
             }
             }
         }
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-            OutlinedButton(onClick=close,modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("Cerrar")}
-            OutlinedButton(onClick={copyReportText(context,report.text())},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("Copiar")}
-            Button(onClick={sharing=true},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("Compartir")}
+        Button(onClick={sharing=true},modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)){Text("Compartir",maxLines=1)}
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick=close,modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("Cerrar",maxLines=1)}
+            OutlinedButton(onClick={copyReportText(context,report.text())},modifier=Modifier.weight(1f).heightIn(min=48.dp)){Text("Copiar texto",maxLines=1)}
         }
     }
     if(sharing)SafeAlertDialog(onDismissRequest={sharing=false},title={Text("Compartir reporte")},text={

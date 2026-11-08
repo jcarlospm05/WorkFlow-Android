@@ -374,12 +374,10 @@ internal fun moduleIcon(module: Module): ImageVector = when (module) {
                             Module.FUEL -> {
                                 if (doc.assets.isEmpty()) item { Button(onClick = { newMaster("asset") }) { Text("Añadir equipos") } }
                                 val fuel = doc.operations.filter { it.module == Module.FUEL }
-                                item { WFCard(Modifier.fillMaxWidth(), Brand.Sand) {
-                                    Text("Equipos pendientes de combustible", style = MaterialTheme.typography.titleSmall)
-                                    Text("${fuel.count { it.status == "Pendiente" }} equipos con abastecimiento pendiente", style = MaterialTheme.typography.bodyMedium)
-                                    ListReportActions(ReportQuery(ReportType.FUEL, doc.day, status = "Pendiente"), reportDocuments, { reportOptions = it }, { vm.message = it })
+                                item { Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                                    Text("${fuel.count{it.status=="Abastecido"}} abastecidos · ${fuel.count{it.status=="Pendiente"}} pendientes",Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium)
                                 } }
-                                item { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { MetricTile(fuel.count { it.status == "Abastecido" }.toString(), "Abastecidos", Icons.Outlined.CheckCircle, Brand.Sage, Modifier.weight(1f)); MetricTile(fuel.count { it.status == "Pendiente" }.toString(), "Pendientes", Icons.Outlined.Schedule, Brand.Sand, Modifier.weight(1f)) } }
+                                item { Text("Listado de equipos pendientes",style=MaterialTheme.typography.titleSmall);ListReportActions(ReportQuery(ReportType.FUEL,doc.day,status="Pendiente"),reportDocuments,{reportOptions=it},{vm.message=it}) }
                                 items(doc.assets, key = { it.id }) { asset ->
                                     val op = fuel.lastOrNull { it.assetId == asset.id }
                                     Column(Modifier.fillMaxWidth().background(Color.White).padding(horizontal=10.dp)) {

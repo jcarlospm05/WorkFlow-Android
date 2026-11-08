@@ -47,7 +47,7 @@ class VisualReportsTest {
             assertTrue("Logo original ausente en $type",logoPixels>100)
             if(type==ReportType.ASSETS) {
                 var redArcPixels=0
-                for(x in 48 until bitmap.width-48 step 2)for(y in 180 until bitmap.height-70 step 2) {
+                for(x in 48 until bitmap.width-48)for(y in 180 until bitmap.height-70) {
                     val c=bitmap.getPixel(x,y)
                     if(kotlin.math.abs(android.graphics.Color.red(c)-196)<14 && kotlin.math.abs(android.graphics.Color.green(c)-71)<14 && kotlin.math.abs(android.graphics.Color.blue(c)-71)<14)redArcPixels++
                 }
