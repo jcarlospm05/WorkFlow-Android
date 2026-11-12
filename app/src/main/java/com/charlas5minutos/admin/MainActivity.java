@@ -17,6 +17,8 @@ import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.ConsoleMessage;
+import android.webkit.CookieManager;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -29,7 +31,7 @@ public class MainActivity extends Activity {
  private static final int PICK=1427;
  private WebView web;
  private ValueCallback<Uri[]> selection;
- private static final String URL_KEY="apps_script_url";
+ private static final String URL_KEY="charlas5_v2_apps_script_url";
  @Override public void onCreate(Bundle saved){
   super.onCreate(saved);
   getWindow().setStatusBarColor(Color.WHITE);
@@ -39,9 +41,12 @@ public class MainActivity extends Activity {
   setContentView(web);
   WebSettings s=web.getSettings();
   s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setAllowFileAccess(false);s.setAllowContentAccess(true);
-  s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+  s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setBuiltInZoomControls(true);s.setDisplayZoomControls(false);
+  CookieManager.getInstance().setAcceptCookie(true);
+  CookieManager.getInstance().setAcceptThirdPartyCookies(web,true);
   web.addJavascriptInterface(new NativeBridge(),"AndroidBridge");
   web.setWebChromeClient(new WebChromeClient(){
+   @Override public boolean onConsoleMessage(ConsoleMessage m){if(m.messageLevel()==ConsoleMessage.MessageLevel.ERROR){android.util.Log.w("C5-V2","Error JS en línea "+m.lineNumber());}return false;}
    @Override public boolean onShowFileChooser(WebView v,ValueCallback<Uri[]> cb,FileChooserParams p){
     if(selection!=null)selection.onReceiveValue(null);
     selection=cb;
@@ -52,6 +57,7 @@ public class MainActivity extends Activity {
    }
   });
   web.setWebViewClient(new WebViewClient(){
+   @Override public void onReceivedError(WebView v,WebResourceRequest request,android.webkit.WebResourceError err){if(request.isForMainFrame())Toast.makeText(MainActivity.this,"No se pudo cargar la aplicación. Revisa la conexión y selecciona Actualizar.",Toast.LENGTH_LONG).show();}
    @Override public void onReceivedSslError(WebView w,SslErrorHandler h,SslError e){h.cancel();}
    @Override public boolean shouldOverrideUrlLoading(WebView w,WebResourceRequest req){
     Uri u=req.getUrl();String host=u.getHost();
@@ -74,7 +80,7 @@ public class MainActivity extends Activity {
   LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(45,20,45,10);
   TextView tv=new TextView(this);tv.setText("Pega aquí la dirección /exec de tu aplicación web de Google Apps Script.");l.addView(tv);
   EditText e=new EditText(this);e.setHint("https://script.google.com/macros/s/.../exec");l.addView(e);
-  AlertDialog d=new AlertDialog.Builder(this).setTitle("Conectar Charlas 5 Minutos").setView(l).setCancelable(false).setPositiveButton("Conectar",null).create();
+  AlertDialog d=new AlertDialog.Builder(this).setTitle("Conectar Charlas 5 Minutos V2").setView(l).setCancelable(false).setPositiveButton("Conectar",null).create();
   d.setOnShowListener(v->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(b->{
    String u=clean(e.getText().toString());if(u==null){e.setError("Enlace no válido");return;}
    getPreferences(MODE_PRIVATE).edit().putString(URL_KEY,u).apply();d.dismiss();web.loadUrl(u+"?view=admin");
@@ -106,8 +112,8 @@ public class MainActivity extends Activity {
    p.print("Charlas 5 Minutos",web.createPrintDocumentAdapter("Charlas 5 Minutos"),new PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build());
   });}
  }
- @Override public boolean onCreateOptionsMenu(Menu m){m.add(0,1,0,"Configurar URL");m.add(0,2,1,"Actualizar");return true;}
- @Override public boolean onOptionsItemSelected(MenuItem i){if(i.getItemId()==1){config();return true;}if(i.getItemId()==2){web.reload();return true;}return super.onOptionsItemSelected(i);}
+ @Override public boolean onCreateOptionsMenu(Menu m){m.add(0,1,0,"Configurar URL");m.add(0,2,1,"Actualizar");m.add(0,3,2,"Limpiar caché");return true;}
+ @Override public boolean onOptionsItemSelected(MenuItem i){if(i.getItemId()==1){config();return true;}if(i.getItemId()==2){web.reload();return true;}if(i.getItemId()==3){web.clearCache(true);web.reload();return true;}return super.onOptionsItemSelected(i);}
  @Override public void onBackPressed(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
  @Override protected void onDestroy(){if(selection!=null)selection.onReceiveValue(null);web.destroy();super.onDestroy();}
 }
