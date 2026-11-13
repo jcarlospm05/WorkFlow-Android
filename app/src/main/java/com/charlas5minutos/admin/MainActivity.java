@@ -57,7 +57,14 @@ public class MainActivity extends Activity {
     if(selection!=null)selection.onReceiveValue(null);
     selection=cb;
     Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
-    i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("image/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+    i.addCategory(Intent.CATEGORY_OPENABLE);
+    String[] accept=p.getAcceptTypes();
+    boolean onlyImages=true;
+    if(accept==null||accept.length==0)onlyImages=false;
+    else for(String t:accept)if(t!=null&&!t.isEmpty()&&!t.startsWith("image/"))onlyImages=false;
+    if(onlyImages){i.setType("image/*");}
+    else{i.setType("*/*");i.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/pdf","application/vnd.openxmlformats-officedocument.presentationml.presentation","application/vnd.ms-powerpoint","application/vnd.openxmlformats-officedocument.wordprocessingml.document","application/msword","text/plain","image/jpeg","image/png","image/webp"});}
+    i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,false);
     try{startActivityForResult(i,PICK);}catch(Exception e){selection.onReceiveValue(null);selection=null;}
     return true;
    }
@@ -86,7 +93,7 @@ public class MainActivity extends Activity {
   LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(45,20,45,10);
   TextView tv=new TextView(this);tv.setText("Pega aquí la dirección /exec de tu aplicación web de Google Apps Script.");l.addView(tv);
   EditText e=new EditText(this);e.setHint("https://script.google.com/macros/s/.../exec");l.addView(e);
-  AlertDialog d=new AlertDialog.Builder(this).setTitle("Conectar Charlas 5 Minutos V2.3").setView(l).setCancelable(false).setPositiveButton("Conectar",null).create();
+  AlertDialog d=new AlertDialog.Builder(this).setTitle("Conectar Charlas 5 Minutos V2.4").setView(l).setCancelable(false).setPositiveButton("Conectar",null).create();
   d.setOnShowListener(v->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(b->{
    String u=clean(e.getText().toString());if(u==null){e.setError("Enlace no válido");return;}
    getPreferences(MODE_PRIVATE).edit().putString(URL_KEY,u).apply();d.dismiss();web.loadUrl(u+"?view=admin");
@@ -176,5 +183,6 @@ public class MainActivity extends Activity {
   lastBackPress=now;
   Toast.makeText(this,"Presiona Atrás otra vez para salir",Toast.LENGTH_SHORT).show();
  }
+ @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);if(web!=null)web.invalidate();}
  @Override protected void onDestroy(){if(selection!=null)selection.onReceiveValue(null);pendingExcel=null;web.destroy();super.onDestroy();}
 }
