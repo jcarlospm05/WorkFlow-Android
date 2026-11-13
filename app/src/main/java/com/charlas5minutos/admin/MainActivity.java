@@ -32,6 +32,8 @@ public class MainActivity extends Activity {
  private WebView web;
  private ValueCallback<Uri[]> selection;
  private static final String URL_KEY="charlas5_v2_apps_script_url";
+ private volatile String currentScreen="login";
+ private long lastBackPress=0L;
  @Override public void onCreate(Bundle saved){
   super.onCreate(saved);
   getWindow().setStatusBarColor(Color.WHITE);
@@ -80,7 +82,7 @@ public class MainActivity extends Activity {
   LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(45,20,45,10);
   TextView tv=new TextView(this);tv.setText("Pega aquí la dirección /exec de tu aplicación web de Google Apps Script.");l.addView(tv);
   EditText e=new EditText(this);e.setHint("https://script.google.com/macros/s/.../exec");l.addView(e);
-  AlertDialog d=new AlertDialog.Builder(this).setTitle("Conectar Charlas 5 Minutos V2").setView(l).setCancelable(false).setPositiveButton("Conectar",null).create();
+  AlertDialog d=new AlertDialog.Builder(this).setTitle("Conectar Charlas 5 Minutos V2.1").setView(l).setCancelable(false).setPositiveButton("Conectar",null).create();
   d.setOnShowListener(v->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(b->{
    String u=clean(e.getText().toString());if(u==null){e.setError("Enlace no válido");return;}
    getPreferences(MODE_PRIVATE).edit().putString(URL_KEY,u).apply();d.dismiss();web.loadUrl(u+"?view=admin");
@@ -98,6 +100,9 @@ public class MainActivity extends Activity {
   selection.onReceiveValue(files);selection=null;
  }
  public class NativeBridge{
+  @JavascriptInterface public void setScreen(String screen){
+    if(screen!=null && screen.matches("[A-Za-z]+"))currentScreen=screen;
+  }
   @JavascriptInterface public void shareWhatsApp(String txt){runOnUiThread(()->{
    Intent i=new Intent(Intent.ACTION_SEND);i.setType("text/plain");i.putExtra(Intent.EXTRA_TEXT,txt);i.setPackage("com.whatsapp");
    try{startActivity(i);}catch(ActivityNotFoundException ex){
@@ -114,6 +119,24 @@ public class MainActivity extends Activity {
  }
  @Override public boolean onCreateOptionsMenu(Menu m){m.add(0,1,0,"Configurar URL");m.add(0,2,1,"Actualizar");m.add(0,3,2,"Limpiar caché");return true;}
  @Override public boolean onOptionsItemSelected(MenuItem i){if(i.getItemId()==1){config();return true;}if(i.getItemId()==2){web.reload();return true;}if(i.getItemId()==3){web.clearCache(true);web.reload();return true;}return super.onOptionsItemSelected(i);}
- @Override public void onBackPressed(){if(web.canGoBack())web.goBack();else super.onBackPressed();}
+ private void navigateBackInApp(){
+  // Apps Script HtmlService suele ejecutar la UI dentro de un iframe.
+  // postMessage alcanza al documento principal y a sus marcos sin leer su contenido.
+  String js="(function(){var msg={type:'C5_NATIVE_BACK'};"+
+      "try{window.postMessage(msg,'*');}catch(e){}"+
+      "var frames=document.querySelectorAll('iframe');"+
+      "for(var j=0;j<frames.length;j++){try{frames[j].contentWindow.postMessage(msg,'*');}catch(e){}}"+
+      "})()";
+  web.evaluateJavascript(js,null);
+ }
+ @Override public void onBackPressed(){
+  if(!"inicio".equals(currentScreen)&&!"login".equals(currentScreen)){
+    navigateBackInApp();return;
+  }
+  long now=android.os.SystemClock.elapsedRealtime();
+  if(now-lastBackPress<1900){finish();return;}
+  lastBackPress=now;
+  Toast.makeText(this,"Presiona Atrás otra vez para salir",Toast.LENGTH_SHORT).show();
+ }
  @Override protected void onDestroy(){if(selection!=null)selection.onReceiveValue(null);web.destroy();super.onDestroy();}
 }
