@@ -27,8 +27,12 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.util.Base64;
+import java.io.OutputStream;
 public class MainActivity extends Activity {
  private static final int PICK=1427;
+ private static final int SAVE_EXCEL=1428;
+ private byte[] pendingExcel;
  private WebView web;
  private ValueCallback<Uri[]> selection;
  private static final String URL_KEY="charlas5_v2_apps_script_url";
@@ -82,14 +86,28 @@ public class MainActivity extends Activity {
   LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(45,20,45,10);
   TextView tv=new TextView(this);tv.setText("Pega aquí la dirección /exec de tu aplicación web de Google Apps Script.");l.addView(tv);
   EditText e=new EditText(this);e.setHint("https://script.google.com/macros/s/.../exec");l.addView(e);
-  AlertDialog d=new AlertDialog.Builder(this).setTitle("Conectar Charlas 5 Minutos V2.1").setView(l).setCancelable(false).setPositiveButton("Conectar",null).create();
+  AlertDialog d=new AlertDialog.Builder(this).setTitle("Conectar Charlas 5 Minutos V2.3").setView(l).setCancelable(false).setPositiveButton("Conectar",null).create();
   d.setOnShowListener(v->d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(b->{
    String u=clean(e.getText().toString());if(u==null){e.setError("Enlace no válido");return;}
    getPreferences(MODE_PRIVATE).edit().putString(URL_KEY,u).apply();d.dismiss();web.loadUrl(u+"?view=admin");
   }));d.show();
  }
  @Override protected void onActivityResult(int r,int result,Intent data){
-  super.onActivityResult(r,result,data);if(r!=PICK||selection==null)return;
+  super.onActivityResult(r,result,data);
+  if(r==SAVE_EXCEL){
+   byte[] bytes=pendingExcel;pendingExcel=null;
+   if(result==RESULT_OK&&data!=null&&data.getData()!=null&&bytes!=null){
+    try(OutputStream stream=getContentResolver().openOutputStream(data.getData())){
+     if(stream==null)throw new IllegalStateException("No se pudo abrir el destino");
+     stream.write(bytes);stream.flush();
+     Toast.makeText(this,"Excel guardado correctamente",Toast.LENGTH_LONG).show();
+    }catch(Exception e){
+     Toast.makeText(this,"No se pudo guardar Excel: "+e.getMessage(),Toast.LENGTH_LONG).show();
+    }
+   }
+   return;
+  }
+  if(r!=PICK||selection==null)return;
   Uri[] files=null;
   if(result==RESULT_OK&&data!=null){
    if(data.getClipData()!=null){
@@ -100,6 +118,26 @@ public class MainActivity extends Activity {
   selection.onReceiveValue(files);selection=null;
  }
  public class NativeBridge{
+  @JavascriptInterface public void exportExcel(String filename,String base64){
+   runOnUiThread(()->{
+    if(pendingExcel!=null){Toast.makeText(MainActivity.this,"Termina de guardar el archivo anterior",Toast.LENGTH_SHORT).show();return;}
+    try{
+     if(base64==null||base64.length()>12*1024*1024)throw new IllegalArgumentException("Excel excede el tamaño permitido");
+     byte[] data=Base64.decode(base64,Base64.DEFAULT);
+     if(data.length<100||data[0]!='P'||data[1]!='K')throw new IllegalArgumentException("El archivo XLSX no es válido");
+     String safeName=filename==null?"Reporte.xlsx":filename.replaceAll("[^a-zA-Z0-9_.-]","_");
+     if(!safeName.endsWith(".xlsx"))safeName+=".xlsx";
+     pendingExcel=data;
+     Intent save=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+     save.addCategory(Intent.CATEGORY_OPENABLE);
+     save.setType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+     save.putExtra(Intent.EXTRA_TITLE,safeName);
+     startActivityForResult(save,SAVE_EXCEL);
+    }catch(Exception e){
+     pendingExcel=null;Toast.makeText(MainActivity.this,"No se pudo preparar Excel: "+e.getMessage(),Toast.LENGTH_LONG).show();
+    }
+   });
+  }
   @JavascriptInterface public void setScreen(String screen){
     if(screen!=null && screen.matches("[A-Za-z]+"))currentScreen=screen;
   }
@@ -138,5 +176,5 @@ public class MainActivity extends Activity {
   lastBackPress=now;
   Toast.makeText(this,"Presiona Atrás otra vez para salir",Toast.LENGTH_SHORT).show();
  }
- @Override protected void onDestroy(){if(selection!=null)selection.onReceiveValue(null);web.destroy();super.onDestroy();}
+ @Override protected void onDestroy(){if(selection!=null)selection.onReceiveValue(null);pendingExcel=null;web.destroy();super.onDestroy();}
 }
