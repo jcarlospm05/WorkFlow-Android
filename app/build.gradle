@@ -3,11 +3,11 @@ android {
  namespace 'com.charlas5minutos.admin'
  compileSdk 35
  defaultConfig {
-   applicationId 'com.charlas5minutos.admin.v23'
+   applicationId 'com.charlas5minutos.admin.v24'
    minSdk 26
    targetSdk 34
-   versionCode 23
-   versionName '2.3.0'
+   versionCode 24
+   versionName '2.4.0'
  }
  buildTypes { release { minifyEnabled false } }
  compileOptions {
